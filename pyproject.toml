@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cutter"
+version = "0.1.0"
+license = "MIT"
+description = "Cut films with an AI agent: footage analysis, beat-synced editing, timelines, FilmCraft finishing and a review app"
+readme = "README.md"
+requires-python = ">=3.11"
+# The full pinned list is in requirements.txt (Docker image). The core (CLI, review app, FilmCraft control)
+# needs only the standard library; the tools import their packages when needed.
+dependencies = []
+
+[project.optional-dependencies]
+tools = [
+    "numpy==2.5.4", "OpenTimelineIO==0.18.1", "otio-fcp-adapter==1.0.0", "librosa==1.0.0",
+    "faster-whisper==1.2.1", "pillow==13.0.0", "opencv-python-headless==5.0.0.93",
+]
+
+[project.scripts]
+cutter = "cutter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cutter = ["review_app/*.py", "review_app/static/*", "templates/**/*"]

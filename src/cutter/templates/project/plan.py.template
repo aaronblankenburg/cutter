@@ -1,0 +1,50 @@
+"""{{CUT}}: apply the feedback on {{PREVIOUS}}.
+
+Run through cutter: cutter plan {{CUT}}
+  reads the edit list of {{PREVIOUS}} (1st argument) and writes the edit list of {{CUT}} (2nd argument).
+Numbers in comments are shot numbers in {{PREVIOUS}} (kept in the new list as nr_previous).
+Every change names the comment it comes from: person, entry number, a short why.
+"""
+import copy
+import json
+import sys
+
+SOURCE, TARGET = sys.argv[1], sys.argv[2]
+E = json.load(open(SOURCE, encoding="utf-8"))
+PREVIOUS = [(sec["name"], s) for sec in E["sections"] for s in sec["shots"]]
+
+# mild audio chain for dialogue (the full chain sounded tinny)
+MILD = {"chain": "mild", "highpass_hz": 80, "noise_reduction": 20, "speech_mix": 0, "compressor": True}
+
+sections = {}
+for name, s0 in PREVIOUS:
+    s = copy.deepcopy(s0)
+    s["nr_previous"] = s0["nr"]
+    # --- examples (adapt or delete) --------------------------------------------------------
+    # Remove (reviewer A, #12): shot 7 goes
+    # if s0["nr"] == 7:
+    #     continue
+    # Shorter (reviewer B, #15): pull the out point of shot 9 in by 1.2 s
+    # if s0["nr"] == 9:
+    #     s["out"] = round(s["out"] - 1.2, 2)
+    # Subtitles (reviewer A, #18): subtitle the dialogue; times relative to the start of the shot
+    # if s0["nr"] == 11:
+    #     s["subtitles"] = [{"from": 0.2, "to": 2.6, "text": "First sentence."}]
+    if s.get("kind") == "dialogue" and s.get("audio", {}).get("chain") not in (None, "mild"):
+        s["audio"].update(MILD)
+    # picture shots may move only a little during retime (±0.16 s); free_timing=True leaves them alone
+    if s["kind"] in ("picture", "ambience") and s["clip"] != "TXT" and not s.get("free_timing"):
+        s["out_limits"] = [round(s["out"] - 0.16, 3), round(s["out"] + 0.16, 3)]
+    sections.setdefault(name, []).append(s)
+
+ORDER = [x["name"] for x in E["sections"]]
+E["sections"] = [{"name": n, "shots": sections[n]} for n in ORDER if sections.get(n)]
+k = 0
+for x in E["sections"]:
+    for s in x["shots"]:
+        k += 1
+        s["nr"] = k
+
+E["title"] = (E.get("title") or "Film").split(" (")[0] + " ({{CUT}})"
+json.dump(E, open(TARGET, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+print("shots:", k, "| music:", [m["cue"] for m in E.get("music", [])])

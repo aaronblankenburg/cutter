@@ -1,0 +1,50 @@
+# {{TITLE}} – film project
+
+This project is cut with **cutter**. The rules and the cut cycle are in the `video-editing` skill
+(Claude Code: `cutter:video-editing`, Codex: `$video-editing`) and in `docs/` of the cutter repository
+({{CUTTER_HOME}}). This file holds the facts of this project. Talk to the user in the user's language.
+
+## Facts
+
+- Project folder: `{{PROJECT}}`
+- Footage (read only, never change it; mounted read-only in the container):
+{{MEDIA}}
+- License of the film: {{LICENSE}}
+- Music: allowed {{ALLOWED}} (cutter.toml → music.allowed_licenses). Check before use: `{{CUTTER}} music license`.
+  ND and BY-SA are never allowed. If the tags say nothing, ask the user.
+- Review app: {{REVIEW_URL}}
+- Analysis: `analysis/clips.json`, transcripts `analysis/transcripts/<clip>.json`, contact sheets `analysis/sheets/`
+- Cuts: `cuts/cut<n>/` with `edit.json`, `decisions.json`, `plan.py` (from cut2 on), timeline files, `cut<n>.fcproj`
+- Exports: `exports/cut<n>.mp4`; review data and passwords: `.cutter/` (private)
+
+## Commands
+
+```sh
+{{CUTTER}} doctor                        # check the setup
+{{CUTTER}} analyze                       # clips, transcripts, contact sheets (long: run in the background)
+{{CUTTER}} music license                 # licenses of music/* against cutter.toml
+{{CUTTER}} music analyze                 # beats, bars, loudness -> music/music.json
+{{CUTTER}} plan cut2 --new               # feedback as code: cuts/cut2/plan.py
+{{CUTTER}} plan cut2                     # -> cuts/cut2/edit.json
+{{CUTTER}} retime cut2                   # cuts on the beat
+{{CUTTER}} timeline cut2                 # audio levels, .otio/.fcp7.xml/.srt
+{{CUTTER}} filmcraft build cut2          # FilmCraft project cuts/cut2/cut2.fcproj (headless)
+{{CUTTER}} filmcraft export cut2         # exports/cut2.mp4, subtitles burned in
+{{CUTTER}} review-data cut2              # uses exports/cut2.mp4 if it exists
+{{CUTTER}} review password <name>        # the user types the password (only a hash is stored)
+{{CUTTER}} serve                         # review app in the home network (ask first)
+{{CUTTER}} feedback fetch                # comments on the newest cut -> .cutter/review/feedback-<cut>.json
+{{CUTTER}} feedback reply cut2 --file replies.json
+```
+
+Every command accepts `--json`; commands that write, render or deploy accept `--dry-run`.
+
+## Rules for this project
+
+- Never change the footage and never write into it. New files only in the project folder.
+- Ask the user before large downloads (Docker image, Whisper model), `sudo`, changes to the shell configuration
+  or to `~/.claude` / `~/.codex` / `~/.agents`, deploying, and deleting anything.
+- Only feedback on the newest cut counts. Every cut gets `cuts/cut<n>/decisions.json`.
+- Always subtitle dialogue; burn the subtitles in on export.
+- Use the "mild" audio chain for dialogue (the full chain sounded tinny).
+- Never run browser tests of the review app against real data.

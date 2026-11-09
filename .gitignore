@@ -1,0 +1,51 @@
+# Secrets and local settings: never in the repository
+deploy.env
+.env
+htpasswd
+*.htpasswd
+filmcraft_token
+*_token
+*.sqlite
+*.sqlite-*
+feedback_*.json
+feedback-*.json
+.cutter/
+
+# Local reference tests (paths to real projects, only on one computer)
+tests/local/*
+!tests/local/README.md
+
+# Media and generated files
+*.mp4
+*.mov
+*.m4v
+*.mkv
+*.mp3
+*.ogg
+*.wav
+*.flac
+*.m4a
+*.aac
+*.jpg
+*.jpeg
+*.png
+*.otio
+*.fcp7.xml
+*_fcp7.xml
+*.srt
+*.fcproj
+examples/demo/footage/
+examples/demo/film/
+
+# Python, Node, tools
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+build/
+dist/
+node_modules/
+.pytest_cache/
+
+# The expected files of the public golden tests (synthetic demo) belong in the repository
+!tests/golden/**

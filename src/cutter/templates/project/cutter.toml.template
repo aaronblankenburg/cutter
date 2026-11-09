@@ -1,0 +1,30 @@
+# cutter project settings – all keys and their defaults: docs/formats.md in the cutter repository
+title = {{TITLE}}
+# spoken language of the footage, e.g. "de" or "en"; empty: Whisper detects it for every clip
+language = {{LANGUAGE}}
+# language of the review app: "en" or "de"
+ui_language = "en"
+# license of the film itself, e.g. "CC BY-NC-SA 4.0"
+project_license = {{LICENSE}}
+
+[media]
+# Named footage folders, mounted read-only (cutter never writes to them). Clips are stored relative to these
+# names, so if the footage moves or you switch computers, change the path here and rebuild the timeline.
+{{MEDIA}}
+
+[music]
+# CC0 and CC BY by default. Add "CC BY-NC" or "CC BY-NC-SA" only if the film is non-commercial.
+# Never allowed: ND (no derivatives) and BY-SA (share-alike forces its license onto the film).
+allowed_licenses = ["CC0", "CC BY"]
+
+[review]
+# reviewers and their colours, e.g. [{ name = "Alice", color = "#38bdf8" }]
+people = []
+# name shown at the agent's notes and replies
+agent = "Claude"
+# address of the deployed review app, if any
+url = {{REVIEW_URL}}
+
+[timeline]
+# where music files are looked up by title (relative to the project, or absolute)
+music_dirs = ["music"]

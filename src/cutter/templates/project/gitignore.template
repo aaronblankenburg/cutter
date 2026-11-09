@@ -1,0 +1,13 @@
+# Project folder of a film: secrets, media and generated files stay out of version control
+.cutter/
+deploy.env
+exports/
+cuts/*/work/
+cuts/*/*.fcproj
+music/*.mp3
+music/*.ogg
+music/*.wav
+music/*.flac
+music/*.m4a
+*.mp4
+*.mov
