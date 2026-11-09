@@ -1,0 +1,35 @@
+# cutter with Docker Compose – an alternative to the launcher bin/cutter, which does all of this by itself.
+#   export PROJECT=/path/to/film MEDIA=/path/to/footage UID="$(id -u)" GID="$(id -g)"
+#   docker compose run --rm cutter analyze     # any cutter command
+#   docker compose up review                   # the review app on port ${CUTTER_REVIEW_PORT:-8089}, all interfaces
+# Project and footage are mounted at the SAME paths as on the host, so timelines and FilmCraft projects written in
+# the container open directly on the host. The footage is read-only. For several footage folders use the launcher.
+name: cutter
+
+x-base: &base
+  image: ${CUTTER_IMAGE:-ghcr.io/aaronblankenburg/cutter:0.1.0}
+  build: .
+  user: "${UID:-1000}:${GID:-1000}"
+  working_dir: ${PROJECT:?set PROJECT to the project folder}
+  init: true
+
+services:
+  cutter:
+    <<: *base
+    profiles: ["tools"]
+    volumes:
+      - {type: bind, source: "${PROJECT}", target: "${PROJECT}", bind: {create_host_path: false}}
+      - {type: bind, source: "${MEDIA:-${PROJECT}}", target: "${MEDIA:-/media-not-set}", read_only: true, bind: {create_host_path: false}}
+      - cutter-models:/models
+
+  review:
+    <<: *base
+    command: ["serve", "--bind", "0.0.0.0", "--port", "8089"]
+    volumes:
+      - {type: bind, source: "${PROJECT}", target: "${PROJECT}", bind: {create_host_path: false}}
+    ports:
+      - "${CUTTER_REVIEW_BIND:-0.0.0.0}:${CUTTER_REVIEW_PORT:-8089}:8089"
+
+volumes:
+  cutter-models:
+    name: cutter-models

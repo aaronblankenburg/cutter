@@ -1,0 +1,16 @@
+.git
+.github
+.agents
+.claude-plugin
+deploy.env
+.env
+**/__pycache__
+**/*.pyc
+tests/local
+tests/browser/node_modules
+examples/demo/footage
+examples/demo/film
+*.mp4
+*.wav
+*.fcproj
+tests/browser

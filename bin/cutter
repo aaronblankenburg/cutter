@@ -1,0 +1,504 @@
+#!/bin/sh
+# cutter launcher: runs cutter inside its Docker image. The host needs only Docker (and the FilmCraft desktop app if
+# you want to fine-tune cuts by hand).
+#
+#  - Image: ghcr.io/<owner>/cutter:<version> (CUTTER_IMAGE overrides it). If it is missing, the launcher asks and pulls
+#    it (CUTTER_YES=1 answers yes); if pulling fails, it builds the image from this checkout.
+#  - The project folder is mounted read-write and every footage folder of cutter.toml ([media]) read-only, each at the
+#    SAME absolute path as on the host, so timelines and FilmCraft projects written in the container open on the host.
+#  - Paths on the command line (--media, --video, --output, files of migrate and music, ...) are made absolute and
+#    mounted too: inputs read-only, outputs read-write.
+#  - The Whisper model lives in the Docker volume cutter-models; CUTTER_MODEL_CACHE=<Hugging Face hub cache> mounts an
+#    existing cache read-only instead.
+#  - Commands run with your user and group ID.
+#  - CUTTER_DEV=1 runs the code of this checkout instead of the code in the image (for contributors).
+# These run on the host itself: agent setup, filmcraft gui, update, image pull|build, and the host part of doctor.
+# POSIX sh, tested with dash; uses only what the BSD userland of macOS has (no readlink -f, no sed -i, no ip there).
+set -eu
+
+# ---------------------------------------------------------------- where am I
+self=$0
+while [ -h "$self" ]; do
+  link=$(ls -ld -- "$self" | sed 's/.* -> //')
+  case $link in /*) self=$link ;; *) self=$(dirname -- "$self")/$link ;; esac
+done
+CUTTER_HOME=$(cd -- "$(dirname -- "$self")/.." && pwd -P)
+LAUNCHER=$CUTTER_HOME/bin/cutter
+
+die() { echo "cutter: $*" >&2; exit "${CODE:-3}"; }
+say() { echo "$*" >&2; }
+
+VERSION=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' "$CUTTER_HOME/src/cutter/__init__.py")
+REPO=$(sed -n 's/^REPO = "\(.*\)"/\1/p' "$CUTTER_HOME/src/cutter/__init__.py")
+if command -v git >/dev/null 2>&1; then          # a fork pulls its own image
+  origin=$(git -C "$CUTTER_HOME" remote get-url origin 2>/dev/null || true)
+  case $origin in
+    *github.com[:/]*) r=$(printf '%s' "$origin" | sed -e 's#.*github\.com[:/]##' -e 's#\.git$##'); [ -n "$r" ] && REPO=$r ;;
+  esac
+fi
+OWNER=$(printf '%s' "${REPO%%/*}" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz')
+IMAGE=${CUTTER_IMAGE:-ghcr.io/$OWNER/cutter:$VERSION}
+IMAGE_SIZE="about 0.7 GB download, 1.8 GB on disk"
+OS=$(uname -s)
+WORK=$(pwd -P)
+NL='
+'
+
+# ---------------------------------------------------------------- helpers
+abspath() {   # absolute path of an existing or a new file or folder (no readlink -f on macOS)
+  p=$1
+  case $p in "~") p=$HOME ;; "~/"*) p=$HOME/${p#"~/"} ;; esac
+  case $p in /*) ;; *) p=$WORK/$p ;; esac
+  if [ -d "$p" ]; then (cd -- "$p" && pwd -P); return 0; fi
+  d=$(dirname -- "$p"); b=$(basename -- "$p")
+  if [ -d "$d" ]; then
+    d=$(cd -- "$d" && pwd -P); [ "$d" = / ] && d=""
+    printf '%s/%s\n' "$d" "$b"
+  else
+    normpath "$p"
+  fi
+}
+
+normpath() {   # remove . and .. from a path without touching the disk
+  out=""; old_ifs=$IFS; IFS=/; set -f
+  for seg in $1; do
+    case $seg in ''|.) ;; ..) out=${out%/*} ;; *) out=$out/$seg ;; esac
+  done
+  set +f; IFS=$old_ifs
+  printf '%s\n' "${out:-/}"
+}
+
+find_project() {   # the folder with cutter.toml: here or above
+  d=$WORK
+  while :; do
+    if [ -f "$d/cutter.toml" ] || [ -f "$d/cutter.json" ]; then printf '%s\n' "$d"; return 0; fi
+    [ "$d" = / ] && return 1
+    d=$(dirname -- "$d")
+  done
+}
+
+media_paths() {   # the paths of the [media] table of a cutter.toml (name = "path"), one per line
+  [ -f "$1" ] || return 0
+  awk '
+    /^[ \t]*\[/ { inmedia = ($0 ~ /^[ \t]*\[media\][ \t]*(#.*)?$/); next }
+    inmedia && /^[ \t]*[A-Za-z0-9_.-]+[ \t]*=[ \t]*"/ {
+      s = $0; sub(/^[^=]*=[ \t]*"/, "", s); out = ""; esc = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (esc) { out = out c; esc = 0 } else if (c == "\\") { esc = 1 } else if (c == "\"") { break } else { out = out c }
+      }
+      if (out != "") print out
+    }' "$1"
+}
+
+lan_ip() {
+  ip=""
+  if [ "$OS" = Darwin ]; then
+    ip=$(ipconfig getifaddr en0 2>/dev/null || true)
+    [ -n "$ip" ] || ip=$(ipconfig getifaddr en1 2>/dev/null || true)
+  else
+    if command -v ip >/dev/null 2>&1; then
+      ip=$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n 1)
+    fi
+    [ -n "$ip" ] || ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+  printf '%s' "$ip"
+}
+
+print_urls() {   # print_urls PORT BIND
+  if [ "$2" = 0.0.0.0 ]; then
+    echo "  http://localhost:$1"
+    ip=$(lan_ip); [ -n "$ip" ] && echo "  http://$ip:$1"
+    if [ "$OS" = Darwin ]; then
+      n=$(scutil --get LocalHostName 2>/dev/null || true); [ -n "$n" ] && echo "  http://$n.local:$1"
+    fi
+  else
+    echo "  http://$2:$1"
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------- image
+have_image() { docker image inspect "$IMAGE" >/dev/null 2>&1; }
+
+get_image() {   # pull, else build from this checkout
+  say "Pulling $IMAGE ($IMAGE_SIZE) ..."
+  if docker pull "$IMAGE"; then return 0; fi
+  say "Pulling failed; building the image from $CUTTER_HOME instead ..."
+  docker build -t "$IMAGE" "$CUTTER_HOME"
+}
+
+need_docker() {
+  command -v docker >/dev/null 2>&1 || die "Docker is not installed (README: What you need). Check with: $LAUNCHER doctor"
+  docker info >/dev/null 2>&1 || die "Docker is not running or you may not use it (Linux: your user must be in the group docker)."
+}
+
+ensure_image() {
+  need_docker
+  have_image && return 0
+  if [ "${CUTTER_YES:-}" = 1 ]; then get_image; return 0; fi
+  if [ -t 0 ] && [ -t 2 ]; then
+    printf 'The cutter image %s is missing (%s). Download it now? [y/N] ' "$IMAGE" "$IMAGE_SIZE" >&2
+    read -r answer || answer=""
+    case $answer in y|Y|yes|Yes|j|J|ja|Ja) get_image; return 0 ;; esac
+  fi
+  die "The cutter image is missing ($IMAGE_SIZE). Get it with: $LAUNCHER image pull"
+}
+
+short_help() {
+  cat <<EOF
+cutter $VERSION – footage analysis, beat-synced editing, timelines, FilmCraft finishing, review app.
+Every command runs in the Docker image $IMAGE.
+
+  cutter new <folder> --media <path>    create a project
+  cutter doctor [--json]                check what is missing and how to fix it
+  cutter analyze | music | retime | timeline | filmcraft | review-data | serve | feedback | deploy | ...
+  cutter agent setup [--claude] [--codex]    link the video-editing skill (runs on the host)
+  cutter image pull | build              get the image; cutter update  updates cutter and the image
+
+Full help: cutter --help (needs the image). Documentation: $CUTTER_HOME/README.md
+EOF
+}
+
+# ---------------------------------------------------------------- host-only commands
+agent_setup() {   # same behaviour as `cutter agent setup` in the container, but on the host's home folder
+  claude=0; codex=0; replace=0; dry=0
+  for a in "$@"; do
+    case $a in
+      --claude) claude=1 ;; --codex) codex=1 ;; --replace) replace=1 ;; --dry-run) dry=1 ;; --json) ;;
+      -h|--help) echo "usage: cutter agent setup [--claude] [--codex] [--replace] [--dry-run]"; return 0 ;;
+      *) CODE=2 die "unknown option: $a" ;;
+    esac
+  done
+  if [ $claude = 0 ] && [ $codex = 0 ]; then claude=1; codex=1; fi
+  src=$CUTTER_HOME/skills/video-editing
+  [ -f "$src/SKILL.md" ] || die "skill not found: $src"
+  [ $dry = 1 ] && echo "Dry run:"
+  for tool in claude codex; do
+    eval "want=\$$tool"
+    [ "$want" = 1 ] || continue
+    if [ $tool = claude ]; then link=$HOME/.claude/skills/video-editing; name="Claude Code"
+    else link=$HOME/.agents/skills/video-editing; name=Codex; fi
+    state=new
+    if [ -h "$link" ]; then
+      cur=$(ls -ld -- "$link" | sed 's/.* -> //')
+      if [ "$cur" = "$src" ]; then state=unchanged
+      elif [ $replace = 1 ]; then state=replaced
+      else die "$link already points to $cur (--replace replaces the link)"; fi
+    elif [ -e "$link" ]; then
+      die "$link exists and is not a link; remove it yourself if it is not needed"
+    fi
+    if [ $dry = 0 ] && [ $state != unchanged ]; then
+      mkdir -p -- "$(dirname -- "$link")"
+      [ $state = replaced ] && rm -- "$link"
+      ln -s -- "$src" "$link"
+    fi
+    [ $dry = 1 ] && [ $state != unchanged ] && state="dry run"
+    echo "  $name: $link -> $src ($state)"
+  done
+  echo "Check: Claude Code lists video-editing under /skills (as a plugin: cutter:video-editing); Codex: /skills shows video-editing."
+}
+
+filmcraft_gui() {   # start the desktop app with its control channel on 127.0.0.1 (token in a file of mode 600)
+  port=9876
+  prev=""
+  for a in "$@"; do
+    case $prev in --port) port=$a ;; esac
+    case $a in --port=*) port=${a#--port=} ;; esac
+    prev=$a
+  done
+  token_file=${CUTTER_FILMCRAFT_TOKEN:-$HOME/.config/cutter/filmcraft_token}
+  if [ ! -s "$token_file" ]; then
+    mkdir -p -- "$(dirname -- "$token_file")"
+    (umask 077 && od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > "$token_file")
+    say "New control token in $token_file (mode 600)."
+  fi
+  FILMCRAFT_CONTROL_TOKEN=$(cat "$token_file")
+  export FILMCRAFT_CONTROL_TOKEN
+  app=""
+  if [ "$OS" = Darwin ]; then
+    for c in /Applications/FilmCraft.app "$HOME/Applications/FilmCraft.app"; do
+      [ -x "$c/Contents/MacOS/FilmCraft" ] && { app=$c/Contents/MacOS/FilmCraft; break; }
+    done
+  else
+    for c in ${FILMCRAFT_APPIMAGE:-} "$HOME"/Applications/filmcraft-*.AppImage "$HOME"/Applications/FilmCraft*.AppImage; do
+      [ -n "$c" ] && [ -x "$c" ] && app=$c      # the last match wins: the newest version sorts last
+    done
+    [ -n "$app" ] || app=$(command -v filmcraft 2>/dev/null || true)
+  fi
+  [ -n "$app" ] || die "FilmCraft desktop app not found; downloads: https://github.com/storytold/filmcraft/releases (or set FILMCRAFT_APPIMAGE)"
+  say "Starting $app with its control channel on 127.0.0.1:$port"
+  exec "$app" --control "$port"
+}
+
+host_doctor() {   # host checks; sets FACTS (JSON for the container's doctor) and TEXT
+  FACTS=""; TEXT=""
+  q() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+  check() {   # check NAME OK(true|false) REQUIRED(true|false) DETAIL [FIX]
+    j="{\"name\":\"$(q "$1")\",\"ok\":$2,\"required\":$3,\"detail\":\"$(q "$4")\""
+    [ "$2" = false ] && [ -n "${5:-}" ] && j="$j,\"fix\":\"$(q "$5")\""
+    FACTS="${FACTS:+$FACTS,}$j}"
+    if [ "$2" = true ]; then mark="ok "; elif [ "$3" = true ]; then mark="!! "; else mark="-- "; fi
+    TEXT="$TEXT$mark $1: $4$NL"
+    if [ "$2" = false ] && [ -n "${5:-}" ]; then TEXT="$TEXT     fix: $5$NL"; fi
+    return 0
+  }
+  DOCKER_OK=0
+  if command -v docker >/dev/null 2>&1; then
+    v=$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)
+    if [ -n "$v" ]; then DOCKER_OK=1; check Docker true true "Docker $v"
+    elif [ "$OS" = Darwin ]; then check Docker false true "installed, but not running" "start Docker Desktop"
+    else check Docker false true "installed, but not running or not allowed" "start Docker; to use it without sudo: sudo usermod -aG docker \$USER, then log in again (ask the user first)"
+    fi
+  elif [ "$OS" = Darwin ]; then check Docker false true "not installed" "install Docker Desktop: https://docs.docker.com/desktop/setup/install/mac-install/"
+  else check Docker false true "not installed" "install Docker Engine: https://docs.docker.com/engine/install/ (needs sudo – ask the user first)"
+  fi
+  if [ $DOCKER_OK = 1 ] && have_image; then
+    size=$(docker image inspect "$IMAGE" --format '{{.Size}}' 2>/dev/null | awk '{printf "%.1f GB", $1/1e9}')
+    check "Docker image" true true "$IMAGE ($size)"
+  else
+    check "Docker image" false true "$IMAGE missing" "$LAUNCHER image pull ($IMAGE_SIZE – ask the user first)"
+  fi
+  free=$(df -Pk "${PROJECT:-$WORK}" 2>/dev/null | awk 'NR == 2 {printf "%.1f", $4 / 1e6}')
+  if [ -n "$free" ]; then
+    if awk -v f="$free" 'BEGIN { exit !(f > 5) }'; then check "Free space (host)" true true "$free GB"
+    else check "Free space (host)" false true "$free GB" "the image, the speech model and the exports need several GB"; fi
+  fi
+  app=""
+  if [ "$OS" = Darwin ]; then [ -d /Applications/FilmCraft.app ] && app=/Applications/FilmCraft.app
+  else for c in ${FILMCRAFT_APPIMAGE:-} "$HOME"/Applications/filmcraft-*.AppImage; do [ -n "$c" ] && [ -x "$c" ] && app=$c; done; fi
+  if [ -n "$app" ]; then check "FilmCraft desktop app (optional)" true false "$app"
+  else check "FilmCraft desktop app (optional)" false false "not found" "only for fine-tuning by hand: https://github.com/storytold/filmcraft/releases"; fi
+  if command -v git >/dev/null 2>&1; then check git true false "$(git --version)"
+  else check git false false "missing" "needed for cutter update"; fi
+  FACTS="{\"checks\":[$FACTS],\"os\":\"$OS\",\"image\":\"$(q "$IMAGE")\",\"launcher\":\"$(q "$LAUNCHER")\"}"
+}
+
+# ---------------------------------------------------------------- host commands
+cmd=${1:-}
+sub=${2:-}
+case $cmd in
+  agent)
+    [ "$sub" = setup ] || CODE=2 die "usage: cutter agent setup [--claude] [--codex] [--replace] [--dry-run]"
+    shift 2; agent_setup "$@"; exit 0 ;;
+  update)
+    command -v git >/dev/null 2>&1 || die "git is missing"
+    case " $* " in *" --dry-run "*)
+      echo "Dry run – would run: git -C $CUTTER_HOME pull --ff-only; then pull the image of the new version"; exit 0 ;;
+    esac
+    git -C "$CUTTER_HOME" pull --ff-only
+    exec "$LAUNCHER" image pull ;;
+  image)
+    need_docker
+    case $sub in
+      pull) get_image ;;
+      build) docker build -t "$IMAGE" "$CUTTER_HOME" ;;
+      *) CODE=2 die "usage: cutter image pull | build" ;;
+    esac
+    exit 0 ;;
+  filmcraft)
+    if [ "$sub" = gui ]; then shift 2; filmcraft_gui "$@"; fi ;;
+  ""|-h|--help|help)
+    if ! command -v docker >/dev/null 2>&1 || ! have_image; then short_help; exit 0; fi
+    [ "$cmd" = help ] && shift
+    [ $# -gt 0 ] || set -- --help ;;
+esac
+
+# ---------------------------------------------------------------- the project and what to mount
+PROJECT=""
+prev=""
+for a in "$@"; do                                  # --project overrides the search from here upwards
+  case $prev in --project) PROJECT=$(abspath "$a") ;; esac
+  case $a in --project=*) PROJECT=$(abspath "${a#--project=}") ;; esac
+  prev=$a
+done
+[ -n "$PROJECT" ] || PROJECT=$(find_project || true)
+DRY=0
+case " $* " in *" --dry-run "*) DRY=1 ;; esac
+
+if [ "$cmd" = doctor ]; then
+  host_doctor
+  if [ $DOCKER_OK = 0 ] || ! have_image; then
+    case " $* " in
+      *" --json "*) printf '{"ok":false,"in_container":false,%s\n' "${FACTS#\{}" ;;
+      *) printf '%s' "$TEXT"; echo "Something required is missing (marked !!)." ;;
+    esac
+    exit 4
+  fi
+  set -- "$@" --host-facts "$FACTS"
+fi
+
+ensure_image
+
+OPTS=$(mktemp "${TMPDIR:-/tmp}/cutter.XXXXXX")
+trap 'rm -f "$OPTS" "$OPTS.media"' EXIT
+trap 'rm -f "$OPTS" "$OPTS.media"; exit 130' INT TERM
+opt() { for o in "$@"; do printf '%s\n' "$o" >> "$OPTS"; done; }
+MOUNTED=""                                         # lines "rw /path" or "ro /path"
+
+covered() {   # covered PATH MODE: is PATH inside a mount that allows MODE?
+  printf '%s\n' "$MOUNTED" | {
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      m=${line%% *}; d=${line#* }
+      case $1/ in "$d"/*) if [ "$2" = ro ] || [ "$m" = rw ]; then exit 0; fi ;; esac
+    done
+    exit 1
+  }
+}
+
+mount_dir() {   # mount_dir DIR ro|rw – at the same path; only existing folders (Docker would create missing ones as root)
+  [ -d "$1" ] || return 0
+  covered "$1" "$2" && return 0
+  if [ "$2" = ro ]; then opt -v "$1:$1:ro"; else opt -v "$1:$1"; fi
+  MOUNTED="$MOUNTED$NL$2 $1"
+}
+
+new_dir() {   # new_dir DIR: a folder that new or demo creates; created here so that it belongs to you
+  if [ $DRY = 1 ]; then mount_dir "$1" ro; else mkdir -p -- "$1"; mount_dir "$1" rw; fi
+}
+
+[ -n "$PROJECT" ] && mount_dir "$PROJECT" rw
+if [ -n "$PROJECT" ]; then
+  media_paths "$PROJECT/cutter.toml" > "$OPTS.media"
+  while IFS= read -r m; do
+    case $m in "~/"*) m=$HOME/${m#"~/"} ;; /*) ;; *) m=$PROJECT/$m ;; esac
+    if [ -d "$m" ]; then mount_dir "$(normpath "$m")" ro; fi   # at the path as written: clips refer to it
+  done < "$OPTS.media"
+  rm -f "$OPTS.media"
+fi
+
+path_option() {   # path_option OPTION VALUE: mount what the option points to
+  case $1 in
+    --project) ;;
+    --media|--data) mount_dir "$2" ro ;;
+    --video|--base|--recording|--file|--env) mount_dir "$(dirname -- "$2")" ro ;;
+    --config|--local) mount_dir "$(dirname -- "$2")" rw ;;
+    --output) d=$(dirname -- "$2"); [ $DRY = 1 ] || mkdir -p -- "$d"; mount_dir "$d" rw ;;
+  esac
+}
+
+# rewrite the arguments: paths absolute, and mounted
+n=$#; prev=""; pos=-1; FOLDER=""; part=""
+for a in "$@"; do
+  new=$a
+  if [ -n "$prev" ]; then
+    case $prev in
+      --project|--media|--data|--video|--base|--recording|--file|--env|--config|--local|--output)
+        new=$(abspath "$a"); path_option "$prev" "$new" ;;
+    esac
+    prev=""
+  else
+    case $a in
+      --project|--media|--data|--video|--base|--recording|--file|--env|--config|--local|--output|\
+      --title|--license|--review-url|--port|--bind|--model|--cut|--status|--since|--until|--exclude|--only|\
+      --language|--device|--threads|--max-frames|--interval|--start-bpm|--previous|--preset|--start|--end|\
+      --jobs|--filmcraft-port|--prompt|--host-facts)
+        prev=$a ;;
+      --project=*|--media=*|--data=*|--video=*|--base=*|--recording=*|--file=*|--env=*|--config=*|--local=*|--output=*)
+        o=${a%%=*}; v=$(abspath "${a#*=}"); path_option "$o" "$v"; new="$o=$v" ;;
+      -*) ;;
+      *)
+        pos=$((pos + 1))
+        [ $pos -eq 1 ] && part=$a                  # the first argument after the command: folder, cut or subcommand
+        case $cmd:$pos in
+          new:1) new=$(abspath "$a"); FOLDER=$new; new_dir "$new" ;;
+          demo:2) case $part in media|project) new=$(abspath "$a"); FOLDER=$new; new_dir "$new" ;; esac ;;
+          migrate:0|music:0|music:1|tool:0|tool:1) ;;
+          migrate:*) new=$(abspath "$a"); mount_dir "$(dirname -- "$new")" rw ;;
+          music:*) new=$(abspath "$a"); mount_dir "$(dirname -- "$new")" ro ;;
+          tool:2) case $part in window|frames) new=$(abspath "$a"); d=$(dirname -- "$new"); mkdir -p -- "$d"; mount_dir "$d" rw ;; esac ;;
+        esac ;;
+    esac
+  fi
+  set -- "$@" "$new"
+done
+shift "$n"
+
+# cutter new without a folder: the current folder if it is empty, otherwise ./<name>-film in it
+if [ "$cmd" = new ] && [ -z "$FOLDER" ]; then
+  if [ $DRY = 1 ]; then mount_dir "$WORK" ro; else mount_dir "$WORK" rw; fi
+fi
+
+# the working directory inside the container: here, if it is mounted
+if covered "$WORK" ro; then WDIR=$WORK
+elif [ -n "$PROJECT" ]; then WDIR=$PROJECT
+elif [ -n "$FOLDER" ] && [ -d "$FOLDER" ]; then WDIR=$FOLDER
+else WDIR=/tmp; fi
+
+# ---------------------------------------------------------------- docker run
+opt --rm --init --user "$(id -u):$(id -g)" -w "$WDIR" -e HOME=/home/cutter \
+    -e "CUTTER_LAUNCHER=$LAUNCHER" -e "CUTTER_HOME=$CUTTER_HOME"
+tz=${TZ:-$(readlink /etc/localtime 2>/dev/null | sed -n 's#.*zoneinfo/##p')}
+[ -n "$tz" ] && opt -e "TZ=$tz"
+if [ -n "${CUTTER_MODEL_CACHE:-}" ]; then
+  [ -d "$CUTTER_MODEL_CACHE" ] || die "CUTTER_MODEL_CACHE is not a folder: $CUTTER_MODEL_CACHE"
+  opt -v "$(cd -- "$CUTTER_MODEL_CACHE" && pwd -P):/models/hub:ro" -e HF_HUB_OFFLINE=1
+else
+  opt -v cutter-models:/models
+fi
+if [ "${CUTTER_DEV:-}" = 1 ]; then                 # contributors: run this checkout's code in the image, no rebuild
+  opt -v "$CUTTER_HOME/src:/opt/cutter-dev:ro" -e PYTHONPATH=/opt/cutter-dev
+fi
+TTY=""
+if [ -t 0 ] && [ -t 1 ]; then TTY=1; fi
+
+case $cmd in
+  serve)
+    port=${CUTTER_REVIEW_PORT:-8089}; bind=0.0.0.0; extra=""; prev=""
+    for a in "$@"; do
+      case $prev in --port) port=$a ;; --bind) bind=$a ;; esac
+      case $a in --port=*) port=${a#--port=} ;; --bind=*) bind=${a#--bind=} ;; --dry-run|--json) extra="$extra $a" ;; esac
+      prev=$a
+    done
+    case $port in ''|*[!0-9]*) CODE=2 die "invalid port: $port" ;; esac
+    if [ "$bind" = 0.0.0.0 ]; then opt -p "$port:8089"; else opt -p "$bind:$port:8089"; fi
+    opt --name "cutter-review-$port"
+    if [ -n "$TTY" ]; then opt -it; fi
+    if [ -n "$PROJECT" ]; then set -- serve --project "$PROJECT" --bind 0.0.0.0 --port 8089 $extra
+    else set -- serve --bind 0.0.0.0 --port 8089 $extra; fi
+    if [ $DRY = 0 ]; then
+      say "cutter review app – plain HTTP, share it only in networks you trust. Addresses:"
+      print_urls "$port" "$bind" >&2
+      say "Stop it with Ctrl+C (or: docker stop cutter-review-$port)."
+    fi ;;
+  review)
+    opt -i                                         # the password comes from the terminal (or from stdin)
+    if [ -n "$TTY" ]; then opt -t; fi ;;
+  deploy|feedback)
+    if [ -n "$TTY" ]; then opt -it; fi
+    if [ -d "$HOME/.ssh" ]; then opt -v "$HOME/.ssh:/home/cutter/.ssh:ro"; fi
+    if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -S "$SSH_AUTH_SOCK" ]; then
+      opt -v "$SSH_AUTH_SOCK:/tmp/ssh-agent.sock" -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock
+    elif [ "$OS" = Darwin ]; then
+      opt -v /run/host-services/ssh-auth.sock:/tmp/ssh-agent.sock -e SSH_AUTH_SOCK=/tmp/ssh-agent.sock
+    fi
+    case " $* " in
+      *" --env "*|*" --env="*) ;;
+      *) if [ -f "$CUTTER_HOME/deploy.env" ] && ! { [ -n "$PROJECT" ] && [ -f "$PROJECT/deploy.env" ]; }; then
+           opt -v "$CUTTER_HOME/deploy.env:$CUTTER_HOME/deploy.env:ro" -e "CUTTER_DEPLOY_ENV=$CUTTER_HOME/deploy.env"
+         fi ;;
+    esac ;;
+  filmcraft)
+    if [ -n "$TTY" ]; then opt -it; fi
+    case " $* " in
+      *" --bridge"*)
+        [ "$OS" = Linux ] || die "--bridge from the container needs host networking (Linux); on macOS work headless or in the desktop app"
+        token_file=${CUTTER_FILMCRAFT_TOKEN:-$HOME/.config/cutter/filmcraft_token}
+        [ -f "$token_file" ] || die "no control token; start the desktop app with: cutter filmcraft gui"
+        opt --network host -v "$token_file:/home/cutter/.config/cutter/filmcraft_token:ro" ;;
+    esac ;;
+  *)
+    if [ -n "$TTY" ]; then opt -it; fi ;;
+esac
+
+# docker run <options> IMAGE <arguments>: append the options and the image, then move the arguments behind them
+n=$#
+while IFS= read -r o; do set -- "$@" "$o"; done < "$OPTS"
+set -- "$@" "$IMAGE"
+i=0
+while [ $i -lt "$n" ]; do a=$1; shift; set -- "$@" "$a"; i=$((i + 1)); done
+rm -f "$OPTS"
+trap - EXIT INT TERM
+if [ -n "${CUTTER_LAUNCHER_DEBUG:-}" ]; then printf 'docker run %s\n' "$*" >&2; fi
+exec docker run "$@"
