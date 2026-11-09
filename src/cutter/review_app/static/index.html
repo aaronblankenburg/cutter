@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#111418">
+<title>cutter review</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script src="i18n.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true">✂</span><span class="title" id="film-title" data-i18n="app_title">cutter review</span></div>
+  <label class="cut-choice"><span data-i18n="cut">Cut</span> <select id="cut-select" data-i18n-aria="cut" aria-label="Cut"></select></label>
+  <span class="connection" id="connection" data-i18n-title="connection_title" title="Connection to the server">●</span>
+  <button type="button" class="person-button" id="name-button" data-i18n-title="change_name" title="Change name">–</button>
+  <button type="button" class="round" id="help-button" data-i18n-title="help_title" data-i18n-aria="help_aria" title="Keyboard shortcuts (?)" aria-label="Help and keyboard shortcuts">?</button>
+</header>
+
+<main class="layout">
+  <section class="col-left">
+    <div class="video-frame" id="video-frame">
+      <video id="video" playsinline preload="auto"></video>
+      <div class="tap-area" id="tap-area" aria-hidden="true"></div>
+      <div class="tap-hint left" id="tap-left" aria-hidden="true">« 5 s</div>
+      <div class="tap-hint right" id="tap-right" aria-hidden="true">5 s »</div>
+      <div class="video-hint" id="video-hint" hidden></div>
+      <div class="loading-hint" id="loading-hint" data-i18n="loading">Loading video …</div>
+    </div>
+
+    <div class="controls" role="toolbar" data-i18n-aria="playback" aria-label="Playback">
+      <div class="row transport">
+        <button type="button" data-cmd="prevShot" data-i18n-title="prev_shot" data-i18n-aria="prev_shot" title="Previous shot (Shift+←)" aria-label="Previous shot">⏮</button>
+        <button type="button" data-cmd="back2" data-i18n-title="back2" title="2 s back (←)">−2 s</button>
+        <button type="button" data-cmd="frameBack" data-i18n-title="frame_back" data-i18n-aria="frame_back" data-i18n="frame_back_label" title="1 frame back (,)" aria-label="1 frame back">‹ 1 f</button>
+        <button type="button" data-cmd="play" class="main" id="play-button" data-i18n-title="play_title" data-i18n-aria="play" title="Play/pause (Space, K)" aria-label="Play">▶</button>
+        <button type="button" data-cmd="frameFwd" data-i18n-title="frame_fwd" data-i18n-aria="frame_fwd" data-i18n="frame_fwd_label" title="1 frame forward (.)" aria-label="1 frame forward">1 f ›</button>
+        <button type="button" data-cmd="fwd2" data-i18n-title="fwd2" title="2 s forward (→)">+2 s</button>
+        <button type="button" data-cmd="nextShot" data-i18n-title="next_shot" data-i18n-aria="next_shot" title="Next shot (Shift+→)" aria-label="Next shot">⏭</button>
+      </div>
+      <div class="row extras">
+        <div class="speed" role="group" data-i18n-aria="speed" aria-label="Speed">
+          <button type="button" data-rate="0.5">0.5×</button><button type="button" data-rate="1" class="on">1×</button><button type="button" data-rate="1.5">1.5×</button><button type="button" data-rate="2">2×</button>
+        </div>
+        <button type="button" data-cmd="editLoop" id="loop-button" data-i18n="loop_label" data-i18n-title="loop_title" title="Edit preview: loop from 2 s before to 2 s after the nearest edit (S)">⟲ Edit</button>
+        <button type="button" data-cmd="zoom" id="zoom-button" data-i18n="zoom_label" data-i18n-title="zoom_title" title="Zoom the timeline: ±20 s around the current position (Z)">Zoom</button>
+        <button type="button" data-cmd="fullscreen" data-i18n-title="fullscreen" data-i18n-aria="fullscreen" title="Full screen" aria-label="Full screen">⛶</button>
+        <span class="time" id="time">00:00:00 / 00:00:00</span>
+      </div>
+    </div>
+
+    <div class="timeline" id="timeline">
+      <canvas id="tl-canvas" data-i18n-aria="timeline_aria" aria-label="Timeline: click jumps, drag scrubs"></canvas>
+      <div class="tl-preview" id="tl-preview" hidden>
+        <div class="tl-image" id="tl-image"></div>
+        <div class="tl-text" id="tl-text"></div>
+      </div>
+    </div>
+    <div class="now" id="now" aria-live="polite" hidden></div>
+
+    <section class="entry-form" data-i18n-aria="entry_aria" aria-label="Comment on the current position">
+      <div class="entry-head">
+        <span class="position" id="position">Comment on 0:00</span>
+        <span class="range" id="range" hidden></span>
+        <span class="io">
+          <button type="button" data-cmd="setIn" data-i18n="set_in" data-i18n-title="set_in_title" title="Range: start (I)">I start</button>
+          <button type="button" data-cmd="setOut" data-i18n="set_out" data-i18n-title="set_out_title" title="Range: end (O)">O end</button>
+          <button type="button" data-cmd="clearRange" id="range-clear" data-i18n-title="clear_range" title="Clear range (Esc)" hidden>×</button>
+        </span>
+      </div>
+      <div class="quick" id="quick"></div>
+      <form class="note-form" id="note-form" autocomplete="off">
+        <div class="reactions" id="reactions"></div>
+        <input type="text" id="note" maxlength="2000" data-i18n-placeholder="note_placeholder" data-i18n-aria="note_aria" placeholder="Note on the current position … (N)" enterkeyhint="send" aria-label="Note">
+        <button type="submit" class="save" data-i18n="save">Save</button>
+      </form>
+    </section>
+  </section>
+
+  <section class="col-right">
+    <aside class="info" id="info" aria-live="polite">
+      <div class="info-head"><span class="nr" id="info-nr">–</span><span class="kind" id="info-kind"></span><span class="section" id="info-section"></span></div>
+      <dl>
+        <dt data-i18n="info_clip">Clip</dt><dd id="info-clip">–</dd>
+        <dt data-i18n="info_music">Music</dt><dd id="info-music">–</dd>
+        <dt data-i18n="info_edit">Edit</dt><dd id="info-edit">–</dd>
+      </dl>
+      <p class="sentence" id="info-sentence"></p>
+      <p class="cut-note" id="info-note"></p>
+      <div class="info-now" id="info-now" hidden></div>
+    </aside>
+
+    <section class="list">
+      <div class="list-head">
+        <h2 class="list-title"><span data-i18n="comments">Comments</span> <span id="count" class="count"></span></h2>
+        <div class="filter" id="filter">
+          <select id="filter-person" data-i18n-aria="filter_person" aria-label="Filter by person"></select>
+          <select id="filter-status" data-i18n-aria="filter_status" aria-label="Filter by status">
+            <option value="" data-i18n="all_statuses">all statuses</option><option value="open" data-i18n="status_open">open</option><option value="done" data-i18n="status_done">done</option><option value="rejected" data-i18n="status_rejected">rejected</option>
+          </select>
+        </div>
+      </div>
+      <p class="legend" id="legend" hidden></p>
+      <ol class="entries" id="entries"></ol>
+      <p class="empty" id="list-empty" data-i18n="list_empty" hidden>No comments yet. Just press a button or write a note while you watch.</p>
+    </section>
+  </section>
+</main>
+
+<dialog id="name-dialog" class="dialog">
+  <form method="dialog" id="name-form">
+    <h2 data-i18n="name_title">What is your name?</h2>
+    <p data-i18n="name_text">Your name is shown at your comments. It is stored only in this browser.</p>
+    <div class="suggestions" id="name-suggestions"></div>
+    <input type="text" id="name-input" maxlength="40" required autocomplete="name" data-i18n-placeholder="name_placeholder" placeholder="Name" aria-label="Name">
+    <div class="buttons"><button type="submit" value="ok" class="save" data-i18n="name_go">Let’s go</button></div>
+  </form>
+</dialog>
+
+<dialog id="help-dialog" class="dialog wide">
+  <form method="dialog">
+    <h2 data-i18n="help_heading">How to use</h2>
+    <table class="shortcuts">
+      <tr><th data-i18n="key_space">Space</th><td data-i18n="key_space_text">Play / pause</td></tr>
+      <tr><th>J · K · L</th><td data-i18n="key_jkl_text">backwards · stop · forwards (press again: faster)</td></tr>
+      <tr><th>, · .</th><td data-i18n="key_frames_text">1 frame back · 1 frame forward</td></tr>
+      <tr><th>← · →</th><td data-i18n="key_arrows_text">2 s back · 2 s forward</td></tr>
+      <tr><th data-i18n="key_shift">Shift + ← · →</th><td data-i18n="key_shift_text">previous · next shot</td></tr>
+      <tr><th>S</th><td data-i18n="key_s_text">Edit preview: loop from 2 s before to 2 s after the nearest edit</td></tr>
+      <tr><th>Z</th><td data-i18n="key_z_text">Zoom: timeline ±20 s around the current position</td></tr>
+      <tr><th>N</th><td data-i18n="key_n_text">Write a note (the video pauses)</td></tr>
+      <tr><th>I · O</th><td data-i18n="key_io_text">Range start · end for the next comment</td></tr>
+      <tr><th>X</th><td data-i18n="key_x_text">“Remove” for the current position</td></tr>
+      <tr><th>Esc</th><td data-i18n="key_esc_text">End range and edit preview</td></tr>
+      <tr><th>?</th><td data-i18n="key_q_text">this help</td></tr>
+      <tr><th data-i18n="key_upper">Capital letter</th><td data-i18n="key_upper_text">starts a note, even without clicking into the field (the video pauses)</td></tr>
+    </table>
+    <h3 data-i18n="help_phone">On the phone</h3>
+    <p data-i18n="help_phone_text"></p>
+    <h3 data-i18n="help_comments">Comments</h3>
+    <p data-i18n="help_comments_text"></p>
+    <h3 data-i18n-html="help_agent_html">Comments from <span class="agent-name">Claude</span> (violet)</h3>
+    <p data-i18n-html="help_agent_text_html"></p>
+    <p data-i18n-html="help_change_html"></p>
+    <p data-i18n-html="help_reply_html"></p>
+    <p data-i18n-html="help_now_html"></p>
+    <div class="buttons"><button type="submit" class="save" data-i18n="close">Close</button></div>
+  </form>
+</dialog>
+
+<dialog id="edit-dialog" class="dialog">
+  <form method="dialog" id="edit-form">
+    <h2 data-i18n="edit_title">Change comment</h2>
+    <p class="edit-position" id="edit-position"></p>
+    <label><span data-i18n="action">Action</span> <select id="edit-action"></select></label>
+    <label><span data-i18n="reaction">Reaction</span> <select id="edit-reaction"></select></label>
+    <label><span data-i18n="text">Text</span> <textarea id="edit-text" rows="3" maxlength="2000"></textarea></label>
+    <label class="row-check"><input type="checkbox" id="edit-here"> <span data-i18n="edit_here">move to the current video position</span></label>
+    <div class="buttons">
+      <button type="button" class="delete" id="edit-delete" data-i18n="delete">Delete</button>
+      <span class="spacer"></span>
+      <button type="submit" value="cancel" formnovalidate data-i18n="cancel">Cancel</button>
+      <button type="submit" value="ok" class="save" data-i18n="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden><span id="toast-text"></span><button type="button" id="toast-button" hidden></button></div>
+</body>
+</html>
