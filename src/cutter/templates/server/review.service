@@ -1,0 +1,25 @@
+[Unit]
+Description=cutter review app ({{TITLE}})
+After=network.target
+
+[Service]
+Type=simple
+User={{SERVICE_USER}}
+Group={{SERVICE_USER}}
+WorkingDirectory={{TARGET_DIR}}/app
+ExecStart=/usr/bin/python3 {{TARGET_DIR}}/app/server.py --host 127.0.0.1 --port {{PORT}} --data {{TARGET_DIR}}/data --htpasswd {{TARGET_DIR}}/htpasswd
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=2
+# read-only except data/ (SQLite), no other privileges
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{TARGET_DIR}}/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
