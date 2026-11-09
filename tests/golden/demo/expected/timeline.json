@@ -1,0 +1,350 @@
+{
+ "decisions": {
+  "compared_to": null,
+  "date": "2024-05-02",
+  "entries": [
+   {
+    "id": "overview",
+    "question": null,
+    "refs": [],
+    "t": null,
+    "t_to": null,
+    "text": "Three short sections on a click track.",
+    "title": "cut1 at a glance",
+    "why": null
+   },
+   {
+    "id": "talk",
+    "question": "Is the cutaway too early?",
+    "refs": [],
+    "t": 10.0,
+    "t_to": 18.0,
+    "text": "The dialogue is subtitled.",
+    "title": "Talk with subtitles",
+    "why": "Dialogue is always subtitled."
+   }
+  ],
+  "intro": "The first cut of the demo.",
+  "title": "Changes and decisions in cut1"
+ },
+ "duration": 29.0,
+ "edit_points": [
+  {
+   "after": 2,
+   "before": 1,
+   "kind": "shot",
+   "t": 4.0
+  },
+  {
+   "after": 3,
+   "before": 2,
+   "kind": "shot",
+   "t": 7.04
+  },
+  {
+   "after": 4,
+   "before": 3,
+   "kind": "shot",
+   "t": 10.0
+  },
+  {
+   "after": 4,
+   "before": 4,
+   "kind": "cutaway_in",
+   "t": 13.04
+  },
+  {
+   "after": 4,
+   "before": 4,
+   "kind": "cutaway_out",
+   "t": 15.04
+  },
+  {
+   "after": 5,
+   "before": 4,
+   "kind": "shot",
+   "t": 18.0
+  },
+  {
+   "after": 6,
+   "before": 5,
+   "kind": "shot",
+   "t": 20.0
+  },
+  {
+   "after": 7,
+   "before": 6,
+   "kind": "shot",
+   "t": 22.04
+  },
+  {
+   "after": 8,
+   "before": 7,
+   "kind": "shot",
+   "t": 26.0
+  }
+ ],
+ "format": 2,
+ "fps": 25,
+ "markers": [
+  {
+   "duration": 0.0,
+   "name": "Talk starts",
+   "t": 10.0
+  },
+  {
+   "duration": 3.0,
+   "name": "End card",
+   "t": 26.0
+  }
+ ],
+ "music": [
+  {
+   "artist": "cutter demo",
+   "bpm": null,
+   "cue": "M1",
+   "end": 29.0,
+   "fade_out_s": 2.0,
+   "file": "click_120bpm.wav",
+   "license": "CC BY 4.0",
+   "note": "drum loop with a known tempo, also under the end card",
+   "source_start": 0.48,
+   "start": 0.0,
+   "title": "Click 120"
+  }
+ ],
+ "sections": [
+  {
+   "end": 10.0,
+   "name": "Opening",
+   "start": 0.0
+  },
+  {
+   "end": 18.0,
+   "name": "Talk",
+   "start": 10.0
+  },
+  {
+   "end": 26.0,
+   "name": "Montage",
+   "start": 18.0
+  },
+  {
+   "end": 29.0,
+   "name": "End",
+   "start": 26.0
+  }
+ ],
+ "shots": [
+  {
+   "audio_db": -10.0,
+   "block": null,
+   "clip": "C001",
+   "cutaways": [],
+   "end": 4.0,
+   "file": "2024-05-01 09-00-00 clip01.mp4",
+   "kind": "picture",
+   "music_lower": false,
+   "note": "test pattern, slow start",
+   "nr": 1,
+   "nr_previous": null,
+   "section": "Opening",
+   "sentences": [],
+   "source_in": 1.0,
+   "source_out": 5.0,
+   "start": 0.0,
+   "subtitles": [],
+   "tag": null,
+   "text": ""
+  },
+  {
+   "audio_db": -10.0,
+   "block": null,
+   "clip": "C002",
+   "cutaways": [],
+   "end": 7.04,
+   "file": "2024-05-01 09-05-00 clip02.mp4",
+   "kind": "picture",
+   "music_lower": false,
+   "note": "colour bars",
+   "nr": 2,
+   "nr_previous": null,
+   "section": "Opening",
+   "sentences": [],
+   "source_in": 2.0,
+   "source_out": 5.04,
+   "start": 4.0,
+   "subtitles": [],
+   "tag": null,
+   "text": ""
+  },
+  {
+   "audio_db": -10.0,
+   "block": null,
+   "clip": "C003",
+   "cutaways": [],
+   "end": 10.0,
+   "file": "2024-05-01 09-10-00 clip03.mp4",
+   "kind": "picture",
+   "music_lower": false,
+   "note": "RGB pattern",
+   "nr": 3,
+   "nr_previous": null,
+   "section": "Opening",
+   "sentences": [],
+   "source_in": 0.48,
+   "source_out": 3.44,
+   "start": 7.04,
+   "subtitles": [],
+   "tag": null,
+   "text": ""
+  },
+  {
+   "audio_db": null,
+   "block": null,
+   "clip": "C004",
+   "cutaways": [
+    {
+     "clip": "C005",
+     "end": 15.04,
+     "file": "2024-05-01 09-20-00 clip05.mp4",
+     "note": "cutaway over the talk",
+     "source_in": 2.002,
+     "source_out": 4.004,
+     "start": 13.04
+    }
+   ],
+   "end": 18.0,
+   "file": "2024-05-01 09-15-00 clip04.mp4",
+   "kind": "dialogue",
+   "music_lower": false,
+   "note": "the tone that speaks",
+   "nr": 4,
+   "nr_previous": null,
+   "section": "Talk",
+   "sentences": [],
+   "source_in": 2.0,
+   "source_out": 10.0,
+   "start": 10.0,
+   "subtitles": [
+    {
+     "end": 13.5,
+     "start": 10.3,
+     "text": "This is the demo talking."
+    },
+    {
+     "end": 17.6,
+     "start": 14.0,
+     "text": "Subtitles are burned in on export."
+    }
+   ],
+   "tag": null,
+   "text": ""
+  },
+  {
+   "audio_db": -10.0,
+   "block": "fast cuts",
+   "clip": "C005",
+   "cutaways": [],
+   "end": 20.0,
+   "file": "2024-05-01 09-20-00 clip05.mp4",
+   "kind": "picture",
+   "music_lower": false,
+   "note": "moving pattern",
+   "nr": 5,
+   "nr_previous": null,
+   "section": "Montage",
+   "sentences": [],
+   "source_in": 6.006,
+   "source_out": 8.008,
+   "start": 18.0,
+   "subtitles": [],
+   "tag": null,
+   "text": ""
+  },
+  {
+   "audio_db": -10.0,
+   "block": "fast cuts",
+   "clip": "C001",
+   "cutaways": [],
+   "end": 22.04,
+   "file": "2024-05-01 09-00-00 clip01.mp4",
+   "kind": "picture",
+   "music_lower": false,
+   "note": "pattern again",
+   "nr": 6,
+   "nr_previous": null,
+   "section": "Montage",
+   "sentences": [],
+   "source_in": 8.0,
+   "source_out": 10.04,
+   "start": 20.0,
+   "subtitles": [],
+   "tag": null,
+   "text": ""
+  },
+  {
+   "audio_db": -10.0,
+   "block": null,
+   "clip": "C002",
+   "cutaways": [],
+   "end": 26.0,
+   "file": "2024-05-01 09-05-00 clip02.mp4",
+   "kind": "picture",
+   "music_lower": false,
+   "note": "bars to the end",
+   "nr": 7,
+   "nr_previous": null,
+   "section": "Montage",
+   "sentences": [],
+   "source_in": 7.0,
+   "source_out": 10.96,
+   "start": 22.04,
+   "subtitles": [],
+   "tag": "last_picture",
+   "text": ""
+  },
+  {
+   "audio_db": null,
+   "block": null,
+   "clip": "TXT",
+   "cutaways": [],
+   "end": 29.0,
+   "file": null,
+   "kind": "black",
+   "music_lower": false,
+   "note": "black with the end card",
+   "nr": 8,
+   "nr_previous": null,
+   "section": "End",
+   "sentences": [],
+   "source_in": null,
+   "source_out": null,
+   "start": 26.0,
+   "subtitles": [],
+   "tag": null,
+   "text": ""
+  }
+ ],
+ "source": {
+  "decisions": "decisions.json",
+  "edit": "edit.json",
+  "otio": "cut1.otio",
+  "video": "rough render (no titles or transitions)",
+  "video_kind": "rough"
+ },
+ "subtitles": [
+  {
+   "end": 13.5,
+   "start": 10.3,
+   "text": "This is the demo talking."
+  },
+  {
+   "end": 17.6,
+   "start": 14.0,
+   "text": "Subtitles are burned in on export."
+  }
+ ],
+ "title": "Demo (cut1)",
+ "version": "cut1"
+}

@@ -1,0 +1,24 @@
+# The demo project of the golden tests (see tests/golden_demo.py). The footage root does not need to exist.
+title = "Demo"
+language = "en"
+ui_language = "en"
+project_license = "CC BY 4.0"
+
+[media]
+footage = "/demo/footage"
+
+[music]
+allowed_licenses = ["CC0", "CC BY"]
+
+[review]
+people = [{ name = "Reviewer A", color = "#38bdf8" }, { name = "Reviewer B", color = "#f59e0b" }]
+agent = "Claude"
+
+[retime]
+required_downbeats = [{ last_of = "Opening" }, { last_with_block = "fast cuts" }]
+
+[retime.cues.M1]
+phase = 0
+
+[filmcraft]
+config = "filmcraft.json"

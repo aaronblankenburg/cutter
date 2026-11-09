@@ -1,0 +1,1660 @@
+{
+    "OTIO_SCHEMA": "Timeline.1",
+    "metadata": {
+        "fcp_xml": {
+            "media": {
+                "audio": {},
+                "video": {
+                    "format": {
+                        "samplecharacteristics": {
+                            "anamorphic": "FALSE",
+                            "fielddominance": "none",
+                            "height": 1080,
+                            "pixelaspectratio": "square",
+                            "rate": {
+                                "ntsc": "FALSE",
+                                "timebase": 25
+                            },
+                            "width": 1920
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "name": "Demo (cut1)",
+    "global_start_time": {
+        "OTIO_SCHEMA": "RationalTime.1",
+        "rate": 25.0,
+        "value": 0.0
+    },
+    "tracks": {
+        "OTIO_SCHEMA": "Stack.1",
+        "metadata": {},
+        "name": "tracks",
+        "source_range": null,
+        "effects": [],
+        "markers": [
+            {
+                "OTIO_SCHEMA": "Marker.2",
+                "metadata": {},
+                "name": "Talk starts",
+                "color": "GREEN",
+                "marked_range": {
+                    "OTIO_SCHEMA": "TimeRange.1",
+                    "duration": {
+                        "OTIO_SCHEMA": "RationalTime.1",
+                        "rate": 25.0,
+                        "value": 0.0
+                    },
+                    "start_time": {
+                        "OTIO_SCHEMA": "RationalTime.1",
+                        "rate": 25.0,
+                        "value": 250.0
+                    }
+                },
+                "comment": ""
+            },
+            {
+                "OTIO_SCHEMA": "Marker.2",
+                "metadata": {},
+                "name": "End card",
+                "color": "YELLOW",
+                "marked_range": {
+                    "OTIO_SCHEMA": "TimeRange.1",
+                    "duration": {
+                        "OTIO_SCHEMA": "RationalTime.1",
+                        "rate": 25.0,
+                        "value": 75.0
+                    },
+                    "start_time": {
+                        "OTIO_SCHEMA": "RationalTime.1",
+                        "rate": 25.0,
+                        "value": 650.0
+                    }
+                },
+                "comment": ""
+            }
+        ],
+        "enabled": true,
+        "color": null,
+        "children": [
+            {
+                "OTIO_SCHEMA": "Track.1",
+                "metadata": {},
+                "name": "V1 Picture",
+                "source_range": null,
+                "effects": [],
+                "markers": [],
+                "enabled": true,
+                "color": null,
+                "children": [
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "picture",
+                                "note": "test pattern, slow start",
+                                "nr": 1,
+                                "scale_percent": 150.0,
+                                "section": "Opening",
+                                "source_resolution": "1280x720",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "150",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "01 C001 2024-05-01 09-00-00 clip01.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 100.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 25.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 400.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-00-00%20clip01.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "picture",
+                                "note": "colour bars",
+                                "nr": 2,
+                                "scale_percent": 100.0,
+                                "section": "Opening",
+                                "source_resolution": "1920x1080",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "100",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "02 C002 2024-05-01 09-05-00 clip02.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 76.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 50.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 1080,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1920
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 350.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-05-00%20clip02.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "picture",
+                                "note": "RGB pattern",
+                                "nr": 3,
+                                "scale_percent": 150.0,
+                                "section": "Opening",
+                                "source_resolution": "1280x720",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "150",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "03 C003 2024-05-01 09-10-00 clip03.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 74.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 12.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 300.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-10-00%20clip03.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "dialogue",
+                                "note": "the tone that speaks",
+                                "nr": 4,
+                                "scale_percent": 100.0,
+                                "section": "Talk",
+                                "source_resolution": "1920x1080",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "100",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "04 C004 2024-05-01 09-15-00 clip04.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 200.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 50.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 1080,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1920
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 500.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-15-00%20clip04.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "picture",
+                                "note": "moving pattern",
+                                "nr": 5,
+                                "scale_percent": 150.0,
+                                "section": "Montage",
+                                "source_resolution": "1280x720",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "150",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "05 C005 2024-05-01 09-20-00 clip05.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 29.97002997002997,
+                                "value": 60.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 29.97002997002997,
+                                "value": 180.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 29.97002997002997,
+                                        "value": 450.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 29.97002997002997,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-20-00%20clip05.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "picture",
+                                "note": "pattern again",
+                                "nr": 6,
+                                "scale_percent": 150.0,
+                                "section": "Montage",
+                                "source_resolution": "1280x720",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "150",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "06 C001 2024-05-01 09-00-00 clip01.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 51.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 200.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 400.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-00-00%20clip01.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "picture",
+                                "note": "bars to the end",
+                                "nr": 7,
+                                "scale_percent": 100.0,
+                                "section": "Montage",
+                                "source_resolution": "1920x1080",
+                                "tag": "last_picture"
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "100",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "07 C002 2024-05-01 09-05-00 clip02.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 99.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 175.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 1080,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1920
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 350.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-05-00%20clip02.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Gap.1",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "black",
+                                "note": "black with the end card",
+                                "nr": 8,
+                                "section": "End",
+                                "tag": null
+                            }
+                        },
+                        "name": "",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 75.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 0.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null
+                    }
+                ],
+                "kind": "Video"
+            },
+            {
+                "OTIO_SCHEMA": "Track.1",
+                "metadata": {},
+                "name": "V4 Cutaways",
+                "source_range": null,
+                "effects": [],
+                "markers": [],
+                "enabled": true,
+                "color": null,
+                "children": [
+                    {
+                        "OTIO_SCHEMA": "Gap.1",
+                        "metadata": {},
+                        "name": "",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 326.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 0.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "cutaway_of": 4,
+                                "note": "cutaway over the talk",
+                                "scale_percent": 150.0
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "motion",
+                                            "effectid": "basic",
+                                            "effecttype": "motion",
+                                            "mediatype": "video",
+                                            "name": "Basic Motion",
+                                            "parameter": [
+                                                {
+                                                    "name": "Scale",
+                                                    "parameterid": "scale",
+                                                    "value": "150",
+                                                    "valuemax": 1000,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "04e C005 2024-05-01 09-20-00 clip05.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 29.97002997002997,
+                                "value": 60.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 29.97002997002997,
+                                "value": 60.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 29.97002997002997,
+                                        "value": 450.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 29.97002997002997,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-20-00%20clip05.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    }
+                ],
+                "kind": "Video"
+            },
+            {
+                "OTIO_SCHEMA": "Track.1",
+                "metadata": {},
+                "name": "A1 Dialogue",
+                "source_range": null,
+                "effects": [],
+                "markers": [],
+                "enabled": true,
+                "color": null,
+                "children": [
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "audio": {
+                                    "gain_db": -10.0,
+                                    "reason": "Camera audio lowered under music"
+                                },
+                                "kind": "picture",
+                                "note": "test pattern, slow start",
+                                "nr": 1,
+                                "section": "Opening",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "audiolevels",
+                                            "effectid": "audiolevels",
+                                            "effecttype": "audiolevels",
+                                            "mediatype": "audio",
+                                            "name": "Audio Levels",
+                                            "parameter": [
+                                                {
+                                                    "name": "Level",
+                                                    "parameterid": "level",
+                                                    "value": "0.31623",
+                                                    "valuemax": 3.98109,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "01 C001 2024-05-01 09-00-00 clip01.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 100.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 25.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 400.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-00-00%20clip01.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "audio": {
+                                    "gain_db": -10.0,
+                                    "reason": "Camera audio lowered under music"
+                                },
+                                "kind": "picture",
+                                "note": "colour bars",
+                                "nr": 2,
+                                "section": "Opening",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "audiolevels",
+                                            "effectid": "audiolevels",
+                                            "effecttype": "audiolevels",
+                                            "mediatype": "audio",
+                                            "name": "Audio Levels",
+                                            "parameter": [
+                                                {
+                                                    "name": "Level",
+                                                    "parameterid": "level",
+                                                    "value": "0.31623",
+                                                    "valuemax": 3.98109,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "02 C002 2024-05-01 09-05-00 clip02.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 76.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 50.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 1080,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1920
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 350.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-05-00%20clip02.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "audio": {
+                                    "gain_db": -10.0,
+                                    "reason": "Camera audio lowered under music"
+                                },
+                                "kind": "picture",
+                                "note": "RGB pattern",
+                                "nr": 3,
+                                "section": "Opening",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "audiolevels",
+                                            "effectid": "audiolevels",
+                                            "effecttype": "audiolevels",
+                                            "mediatype": "audio",
+                                            "name": "Audio Levels",
+                                            "parameter": [
+                                                {
+                                                    "name": "Level",
+                                                    "parameterid": "level",
+                                                    "value": "0.31623",
+                                                    "valuemax": 3.98109,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "03 C003 2024-05-01 09-10-00 clip03.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 74.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 12.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 300.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-10-00%20clip03.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "audio": {
+                                    "chain": "mild",
+                                    "compressor": true,
+                                    "highpass_hz": 80,
+                                    "noise_reduction": 20,
+                                    "speech_mix": 0
+                                },
+                                "kind": "dialogue",
+                                "note": "the tone that speaks",
+                                "nr": 4,
+                                "section": "Talk",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "audiolevels",
+                                            "effectid": "audiolevels",
+                                            "effecttype": "audiolevels",
+                                            "mediatype": "audio",
+                                            "name": "Audio Levels",
+                                            "parameter": [
+                                                {
+                                                    "name": "Level",
+                                                    "parameterid": "level",
+                                                    "value": "1.00000",
+                                                    "valuemax": 3.98109,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "04 C004 2024-05-01 09-15-00 clip04.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 200.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 50.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 1080,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1920
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 500.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-15-00%20clip04.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "audio": {
+                                    "gain_db": -10.0,
+                                    "reason": "Camera audio lowered under music"
+                                },
+                                "kind": "picture",
+                                "note": "moving pattern",
+                                "nr": 5,
+                                "section": "Montage",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "audiolevels",
+                                            "effectid": "audiolevels",
+                                            "effecttype": "audiolevels",
+                                            "mediatype": "audio",
+                                            "name": "Audio Levels",
+                                            "parameter": [
+                                                {
+                                                    "name": "Level",
+                                                    "parameterid": "level",
+                                                    "value": "0.31623",
+                                                    "valuemax": 3.98109,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "05 C005 2024-05-01 09-20-00 clip05.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 29.97002997002997,
+                                "value": 60.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 29.97002997002997,
+                                "value": 180.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 29.97002997002997,
+                                        "value": 450.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 29.97002997002997,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-20-00%20clip05.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "audio": {
+                                    "gain_db": -10.0,
+                                    "reason": "Camera audio lowered under music"
+                                },
+                                "kind": "picture",
+                                "note": "pattern again",
+                                "nr": 6,
+                                "section": "Montage",
+                                "tag": null
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "audiolevels",
+                                            "effectid": "audiolevels",
+                                            "effecttype": "audiolevels",
+                                            "mediatype": "audio",
+                                            "name": "Audio Levels",
+                                            "parameter": [
+                                                {
+                                                    "name": "Level",
+                                                    "parameterid": "level",
+                                                    "value": "0.31623",
+                                                    "valuemax": 3.98109,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "06 C001 2024-05-01 09-00-00 clip01.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 51.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 200.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 720,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1280
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 400.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-00-00%20clip01.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "audio": {
+                                    "gain_db": -10.0,
+                                    "reason": "Camera audio lowered under music"
+                                },
+                                "kind": "picture",
+                                "note": "bars to the end",
+                                "nr": 7,
+                                "section": "Montage",
+                                "tag": "last_picture"
+                            },
+                            "fcp_xml": {
+                                "filter": [
+                                    {
+                                        "effect": {
+                                            "effectcategory": "audiolevels",
+                                            "effectid": "audiolevels",
+                                            "effecttype": "audiolevels",
+                                            "mediatype": "audio",
+                                            "name": "Audio Levels",
+                                            "parameter": [
+                                                {
+                                                    "name": "Level",
+                                                    "parameterid": "level",
+                                                    "value": "0.31623",
+                                                    "valuemax": 3.98109,
+                                                    "valuemin": 0
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        "name": "07 C002 2024-05-01 09-05-00 clip02.mp4",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 99.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 175.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {
+                                    "fcp_xml": {
+                                        "media": {
+                                            "audio": {},
+                                            "video": {
+                                                "samplecharacteristics": {
+                                                    "anamorphic": "FALSE",
+                                                    "fielddominance": "none",
+                                                    "height": 1080,
+                                                    "pixelaspectratio": "square",
+                                                    "width": 1920
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 350.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/footage/camera/2024-05-01%2009-05-00%20clip02.mp4"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    },
+                    {
+                        "OTIO_SCHEMA": "Gap.1",
+                        "metadata": {
+                            "cutter": {
+                                "kind": "black",
+                                "note": "black with the end card",
+                                "nr": 8,
+                                "section": "End",
+                                "tag": null
+                            }
+                        },
+                        "name": "",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 75.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 0.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null
+                    }
+                ],
+                "kind": "Audio"
+            },
+            {
+                "OTIO_SCHEMA": "Track.1",
+                "metadata": {},
+                "name": "A2 Music",
+                "source_range": null,
+                "effects": [],
+                "markers": [],
+                "enabled": true,
+                "color": null,
+                "children": [
+                    {
+                        "OTIO_SCHEMA": "Clip.2",
+                        "metadata": {
+                            "cutter": {
+                                "note": "drum loop with a known tempo, also under the end card"
+                            }
+                        },
+                        "name": "M1 Click 120 (cutter demo, CC BY 4.0)",
+                        "source_range": {
+                            "OTIO_SCHEMA": "TimeRange.1",
+                            "duration": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 725.0
+                            },
+                            "start_time": {
+                                "OTIO_SCHEMA": "RationalTime.1",
+                                "rate": 25.0,
+                                "value": 12.0
+                            }
+                        },
+                        "effects": [],
+                        "markers": [],
+                        "enabled": true,
+                        "color": null,
+                        "media_references": {
+                            "DEFAULT_MEDIA": {
+                                "OTIO_SCHEMA": "ExternalReference.1",
+                                "metadata": {},
+                                "name": "",
+                                "available_range": {
+                                    "OTIO_SCHEMA": "TimeRange.1",
+                                    "duration": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 1000.0
+                                    },
+                                    "start_time": {
+                                        "OTIO_SCHEMA": "RationalTime.1",
+                                        "rate": 25.0,
+                                        "value": 0.0
+                                    }
+                                },
+                                "available_image_bounds": null,
+                                "target_url": "file:///demo/film/music/click_120bpm.wav"
+                            }
+                        },
+                        "active_media_reference_key": "DEFAULT_MEDIA"
+                    }
+                ],
+                "kind": "Audio"
+            }
+        ]
+    }
+}

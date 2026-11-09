@@ -1,0 +1,40 @@
+{"id": "graphics.set", "params": {"clip": 900021, "layer": 0, "props": {"shadow": true, "shadow_color": "#000000", "shadow_distance": 0, "shadow_opacity": 90, "shadow_blur": 12, "shadow_size": 6, "align": "center", "size": 150, "fill_color": "#f2efe6", "position": [960, 560]}}}
+{"id": "effects.setParam", "params": {"clip": 900021, "effect": "opacity", "param": "opacity", "value": 0, "time": 127008000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900021, "effect": "opacity", "param": "opacity", "value": 100, "time": 254016000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900021, "effect": "opacity", "param": "opacity", "value": 100, "time": 762048000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900021, "effect": "opacity", "param": "opacity", "value": 0, "time": 889056000000, "keyframe": true}}
+{"id": "graphics.set", "params": {"clip": 900022, "layer": 0, "props": {"shadow": true, "shadow_color": "#000000", "shadow_distance": 0, "shadow_opacity": 90, "shadow_blur": 12, "shadow_size": 6, "font": "P052", "fill_color": "#e6e2d6", "align": "left", "size": 86, "position": [160, 480]}}}
+{"id": "graphics.set", "params": {"clip": 900022, "layer": 1, "props": {"shadow": true, "shadow_color": "#000000", "shadow_distance": 0, "shadow_opacity": 90, "shadow_blur": 12, "shadow_size": 6, "font": "Liberation Sans Narrow", "fill_color": "#e6e2d6", "align": "left", "size": 44, "position": [480, 452], "leading": 6}}}
+{"id": "graphics.set", "params": {"clip": 900022, "layer": 2, "props": {"shadow": true, "shadow_color": "#000000", "shadow_distance": 0, "shadow_opacity": 90, "shadow_blur": 12, "shadow_size": 6, "font": "P052", "fill_color": "#e6e2d6", "align": "left", "size": 92, "position": [160, 700]}}}
+{"id": "effects.setParam", "params": {"clip": 900022, "effect": "opacity", "param": "opacity", "value": 0, "time": 6604416000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900022, "effect": "opacity", "param": "opacity", "value": 100, "time": 6858432000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900022, "effect": "opacity", "param": "opacity", "value": 100, "time": 7112448000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900022, "effect": "opacity", "param": "opacity", "value": 0, "time": 7356303360000, "keyframe": true}}
+{"id": "clip.audioGain", "params": {"clips": [900009], "mode": "set", "db": 0.0}}
+{"id": "clip.audioGain", "params": {"clips": [900010], "mode": "set", "db": 0.0}}
+{"id": "clip.audioGain", "params": {"clips": [900011], "mode": "set", "db": 0.0}}
+{"id": "effects.apply", "params": {"clips": [900012], "effect": "highpass"}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 3, "param": "cutoff", "value": 80}}
+{"id": "effects.apply", "params": {"clips": [900012], "effect": "denoise"}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 4, "param": "amount", "value": 20}}
+{"id": "effects.apply", "params": {"clips": [900012], "effect": "dynamics_rack"}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 5, "param": "comp_threshold", "value": -24.0}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 5, "param": "comp_ratio", "value": 3.0}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 5, "param": "comp_attack", "value": 8.0}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 5, "param": "comp_release", "value": 160.0}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 5, "param": "lim_on", "value": true}}
+{"id": "effects.setParam", "params": {"clip": 900012, "effect": 5, "param": "lim_threshold", "value": -1.0}}
+{"id": "clip.audioGain", "params": {"clips": [900013], "mode": "set", "db": 0.0}}
+{"id": "clip.audioGain", "params": {"clips": [900014], "mode": "set", "db": 0.0}}
+{"id": "clip.audioGain", "params": {"clips": [900015], "mode": "set", "db": 0.0}}
+{"id": "effects.setParam", "params": {"clip": 900016, "effect": "volume", "param": "level", "value": 3.8, "time": 0, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900016, "effect": "volume", "param": "level", "value": 3.8, "time": 2438553600000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900016, "effect": "volume", "param": "level", "value": -15.2, "time": 2540160000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900016, "effect": "volume", "param": "level", "value": -15.2, "time": 4572288000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900016, "effect": "volume", "param": "level", "value": 3.8, "time": 4724697600000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900016, "effect": "volume", "param": "level", "value": 3.8, "time": 6858432000000, "keyframe": true}}
+{"id": "effects.setParam", "params": {"clip": 900016, "effect": "volume", "param": "level", "value": -60, "time": 7356303360000, "keyframe": true}}
+{"id": "captions.import", "params": {"path": "/demo/film/cuts/cut1/cut1.srt", "name": "Subtitles"}}
+{"id": "captions.setStyle", "params": {"track": "C1", "font": "Noto Sans", "fontStyle": "SemiBold", "size": 48, "color": "#ffffff", "background": true, "backgroundColor": "#000000c8", "align": "center", "anchor": "bottom", "margin": 0.06}}
+{"id": "captions.setTrack", "params": {"track": "C1", "language": "en"}}
+{"id": "file.save", "params": {}}

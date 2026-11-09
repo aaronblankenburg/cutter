@@ -1,0 +1,7 @@
+1
+00:00:10,300 --> 00:00:13,500
+This is the demo talking.
+
+2
+00:00:14,000 --> 00:00:17,600
+Subtitles are burned in on export.
