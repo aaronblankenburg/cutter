@@ -1,0 +1,21 @@
+{
+  "name": "cutter",
+  "version": "0.1.0",
+  "description": "Cut films with an AI agent: footage analysis, beat-synced editing, timelines, FilmCraft finishing and a review app where people comment on each cut.",
+  "author": {
+    "name": "cutter project",
+    "url": "https://github.com/aaronblankenburg/cutter"
+  },
+  "homepage": "https://github.com/aaronblankenburg/cutter",
+  "repository": "https://github.com/aaronblankenburg/cutter",
+  "license": "MIT",
+  "keywords": [
+    "video",
+    "editing",
+    "film",
+    "whisper",
+    "otio",
+    "filmcraft",
+    "review"
+  ]
+}
