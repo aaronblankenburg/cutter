@@ -75,14 +75,24 @@ def c_analyze(a, out):
     target = pathlib.Path(a.output) if a.output else p.path("clips").parent
     if a.dry_run:
         return _dry(out, {"media": media, "output": str(target)},
-                    f"  footage: {', '.join(media)}\n  output:  {target} (clips.json, transcripts/, sheets/, strips/)")
+                    f"  footage: {', '.join(media)}\n  output:  {target} (clips.json, transcripts/, sheets/, strips/, quality.txt)")
     r = analyze.run_analysis(media, target, list_only=a.list, since=a.since, until=a.until, exclude=a.exclude, only=a.only,
                              force=a.force, no_transcripts=a.no_transcripts, no_sheets=a.no_sheets, model=a.model,
                              language=a.language or p.get("language") or "auto", device=a.device, threads=a.threads, max_frames=a.max_frames,
                              interval=a.interval, roots=p.media_roots())
-    if a.image and not a.list:
+    if not a.no_image and not a.list:
         from . import image_analysis
-        r["image"] = image_analysis.run(target / "clips.json", p.path("image_analysis"), only=a.only, force=a.force, device=a.device)
+        try:
+            r["image"] = image_analysis.run(target / "clips.json", p.path("image_analysis"), only=a.only, force=a.force,
+                                            device=a.device, text_path=target / "quality.txt",
+                                            content_tags=(p.get("image_analysis") or {}).get("content_tags"))
+        except CutterError as ex:
+            if ex.code != MISSING:
+                raise
+            out.warn(f"{ex.text}: no image analysis")
+        else:
+            r["image"]["sheets"] = analyze.add_quality_bars(target, p.path("image_analysis"))
+            r["text"] = (r.get("text") or "") + f"\nUsable ranges, camera moves, people, sound and place per clip: {target / 'quality.txt'}"
     out.result(r, r.get("text"))
 
 
@@ -286,14 +296,22 @@ def c_review_data(a, out):
 def c_review(a, out):
     p = _project(a)
     if a.review_cmd == "password":
-        script = pathlib.Path(__file__).resolve().parent / "review_app" / "set_password.py"
+        from .review_app import set_password
         f = p.path("htpasswd")
-        if a.dry_run:
-            return _dry(out, {"file": str(f), "name": a.name, "delete": a.delete},
-                        f"  {'remove' if a.delete else 'set the password of'} {a.name} in {f} (only a scrypt hash is stored)")
-        f.parent.mkdir(parents=True, exist_ok=True)
-        args = [sys.executable, str(script), "--file", str(f)] + (["--delete"] if a.delete else []) + [a.name]
-        os.execv(sys.executable, args)
+        try:
+            set_password.check_name(a.name)
+            if a.delete and a.generate:
+                raise set_password.PasswordError("--delete and --generate exclude each other.")
+            if a.dry_run:
+                todo = "remove" if a.delete else "make a password for" if a.generate else "set the password of"
+                return _dry(out, {"file": str(f), "name": a.name, "delete": a.delete, "generate": a.generate,
+                                  "exists": a.name in set_password.names(f)},
+                            f"  {todo} {a.name} in {f} (only a scrypt hash is stored)")
+            r, text = set_password.run(f, a.name, delete=a.delete, make=a.generate)
+        except set_password.PasswordError as ex:
+            raise CutterError(str(ex), USAGE, None if a.delete or a.generate else
+                              f"cutter review password {a.name} --generate makes a password and prints it once") from None
+        out.result(r, text)
 
 
 def c_serve(a, out):
@@ -431,7 +449,9 @@ def parser():
     p.add_argument("--only", help="only these clip IDs, e.g. C017,C023")
     p.add_argument("--force", action="store_true", help="redo existing results")
     p.add_argument("--no-transcripts", action="store_true"); p.add_argument("--no-sheets", action="store_true")
-    p.add_argument("--image", action="store_true", help="also image analysis (sharpness, shake, exposure, scenes)")
+    p.add_argument("--no-image", action="store_true",
+                   help="skip the image and sound analysis (usable ranges, camera moves, people, wind, place)")
+    p.add_argument("--image", action="store_true", help=argparse.SUPPRESS)      # now the default; kept for old scripts
     p.add_argument("--model", default="large-v3-turbo")
     p.add_argument("--language", help="spoken language, e.g. de or en (default: cutter.toml → language, else detected)")
     p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
@@ -490,7 +510,9 @@ def parser():
     p = cmd("review", c_review, "review app settings")
     rs = p.add_subparsers(dest="review_cmd", required=True)
     q = rs.add_parser("password", help="add a reviewer or change their password (stores only a scrypt hash)", parents=[common, dry])
-    q.add_argument("name"); q.add_argument("--delete", action="store_true")
+    q.add_argument("name", help="login name of the reviewer")
+    q.add_argument("--generate", action="store_true", help="make a random password and print it once (needs no terminal)")
+    q.add_argument("--delete", action="store_true", help="remove the reviewer")
 
     p = cmd("serve", c_serve, "run the review app (Basic Auth required)", (common, dry))
     p.add_argument("--port", type=int, help="port (default: CUTTER_REVIEW_PORT or 8089)")

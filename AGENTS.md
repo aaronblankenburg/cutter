@@ -26,7 +26,7 @@ Always:
 |---|---|
 | `bin/cutter` | launcher: runs every command in the Docker image, same-path mounts (POSIX sh) |
 | `src/cutter/cli.py` | the command line; each command imports its module lazily |
-| `src/cutter/` | analyze, music, retime, timeline, filmcraft, review_data, maps, feedback, deploy, doctor, legacy … |
+| `src/cutter/` | analyze, image_analysis (with quality, audio_analysis, telemetry), music, retime, timeline, filmcraft, review_data, maps, feedback, deploy, doctor, legacy … |
 | `src/cutter/review_app/` | review app: `server.py` (standard library only), `static/` (vanilla JS, `i18n.js`) |
 | `src/cutter/templates/` | project files (`cutter new`, `cutter plan`) and server files (`cutter deploy server`) |
 | `skills/video-editing/` | the agent skill (also the Claude Code plugin's skill; `.agents/skills` links to it) |

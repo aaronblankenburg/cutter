@@ -84,16 +84,64 @@ works as well. Cut names: `cut1`, `cut2`, …; commands also accept `3` for `cut
  "duration": 16.0, "created": "2024-05-01 09:00:00", "created_source": "metadata", "device": "…",
  "width": 1920, "height": 1080, "rotation": 0, "fps": 25.0, "fps_raw": "25/1", "vfr": false,
  "has_video": true, "has_audio": true, "audio_rate": 48000, "audio_channels": 2,
- "words": 120, "speech_seconds": 41.5}
+ "words": 120, "speech_seconds": 41.5, "gps": {"lat": 48.1374, "lon": 11.5755, "alt": 519.0}}
 ```
 
 `media` is what counts: the clip's footage root and its path below it. `path` is informational; timelines are always
-built from `media` and the roots in cutter.toml. `created_source` is `metadata`, `filename` or `file_date`.
+built from `media` and the roots in cutter.toml. `created_source` is `metadata`, `filename` or `file_date`. `gps` is
+there when the file names the place (phones do).
 
 ## Transcripts
 
 `analysis/transcripts/C001.json`: `{"id", "file", "language", "language_probability", "segments": [{"start", "end",
 "text", "words": [{"start", "end", "word", "probability"}]}]}` – times in seconds of the clip.
+
+## Image and sound analysis
+
+`analysis/quality.txt` is the part for reading: a few lines per clip (usable ranges, flaws, camera moves, cuts inside
+the clip, people and objects, sound, place, other takes). The numbers behind it are in `analysis/image/C001.json`:
+
+```json
+{"id": "C001", "version": 2, "duration": 34.2, "units": {…},
+ "usable": [{"start": 2.4, "end": 11.0, "camera": "static", "steady": true}, …],
+ "flaws":  [{"start": 0.0, "end": 2.4, "why": ["shaky"]}, …],
+ "camera": [{"start": 0.0, "end": 11.2, "move": "static", "speed": 0.2, "shake": 0.1},
+            {"start": 11.2, "end": 15.0, "move": "pan_right", "speed": 12.4, "shake": 0.4}, …],
+ "scenes": [{"start": 0.0, "end": 20.3}, …],
+ "audio": {"lufs": -23.1, "peak_db": -1.2, "channels": 2, "speech": [{"start": 2.0, "end": 9.6}], "wind": [],
+           "clipping": [], "silence": []},
+ "telemetry": {"source": "gopro", "gps": {"lat": 36.8, "lon": 10.18, "alt": 12.0}, "track": [[0.0, 36.8, 10.18, 12.0, 18.0], …],
+               "distance_m": 340, "speed_kmh": {"mean": 18.0, "max": 31.5}, "gyro": [{"t": 0.0, "turn": 4.1, "shake": 9.3}, …]},
+ "per_second": [{"t": 0, "sharpness": 212.4, "exposure": {"mean": 118.0, "too_dark": 0.0, "clipped": 0.02},
+                 "color": {"warmth": 0.06, "saturation": 0.31}, "pan": 0.3, "pan_x": -0.2, "pan_y": 0.1, "zoom": 0.0,
+                 "shake": 0.2, "motion": 1.1, "faces": 1, "face": 0.22, "people": 2, "person": 0.8,
+                 "objects": {"car": 1}, "shot": "medium close-up", "level": -24.0, "wind": 0.0}, …],
+ "summary": {"usable_s": 25.2, "steady_s": 19.0, "camera": {"static": 22.0, "pan_right": 3.8}, "people_max": 2,
+             "shots": ["medium close-up"], "objects": ["car"], "speech_s": 7.6, "similar": ["C002"], …}}
+```
+
+- **Times** are seconds of the clip. **Speeds** are % of the picture width per second; `units` in the file explains
+  every measure.
+- **`usable`** are the ranges worth cutting from: sharp, not shaky, not a whip pan, neither black nor blown out, at
+  least one second long. `steady` means as calm as a tripod. In a clip that is unsteady throughout (an action
+  camera in the hand) only the worst moments count as shaky, so the calmer parts remain; their `camera` says `shaky`. **`flaws`** is the rest with the reason: `soft`, `shaky`,
+  `whip`, `dark`, `clipped`, or `short` for a good moment under a second. Sharpness depends on the subject, so
+  `soft` means clearly softer than the sharp frames a few seconds around it, or far softer than the clip's sharp
+  frames; a clip that is soft throughout shows up as `low_detail` in the index instead, compared with the other
+  clips of its size.
+- **`camera`** segments are `static`, `handheld`, `shaky`, `pan_left`, `pan_right`, `tilt_up`, `tilt_down`,
+  `push_in` and `pull_out` (a zoom or the camera itself moving), found to about half a second.
+- **`shot`** comes from the largest face (`close-up`, `medium close-up`, `medium`), else from the largest person
+  (`full`, `wide`, `very wide`). Objects are the 80 everyday classes of COCO.
+- **`audio`:** `speech` is voice activity, not a transcript. `wind` needs two microphones (low rumble that the
+  channels do not share); cameras that record one microphone get `rumble` instead, which is wind or an engine.
+- **`telemetry`** has the place from the file's metadata, and from GoPro (GPMF) and DJI (flight log `.SRT`) the
+  track as `[second, lat, lon, alt, km/h]` and, for GoPro, the gyroscope in degrees per second.
+- **`similar`** names clips recorded within half an hour that look alike: probably other takes of the same shot.
+- `horizon_tilt` (degrees) appears only when one long, nearly level line stays put through the clip.
+
+`analysis/image/_index.json` holds every clip's `summary`. Files of `version` 1 (before these fields) are measured
+again by the next `cutter analyze`.
 
 ## music.json
 

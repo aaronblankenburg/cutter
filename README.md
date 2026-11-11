@@ -142,7 +142,7 @@ The same steps by hand:
 cutter new iceland-film --media ~/Footage/Iceland
 cd iceland-film
 cutter doctor
-cutter analyze                       # transcripts, contact sheets, audio levels
+cutter analyze                       # transcripts, contact sheets, usable ranges, camera moves, sound
 # now write cuts/cut1/edit.json (format: docs/formats.md) – normally the agent's job
 cutter music license music/*.mp3     # check licenses against cutter.toml
 cutter music analyze music/*.mp3     # beats, bars, loudness
@@ -169,7 +169,7 @@ The review app shows each cut together with its timeline.
 **Start it:**
 
 ```sh
-cutter review password alice     # once per reviewer; stores only a scrypt hash
+cutter review password alice     # once per reviewer; asks for the password, stores only a scrypt hash
 cutter serve
 ```
 
@@ -239,7 +239,7 @@ If the tags say nothing, the agent asks you instead of guessing.
 |---|---|
 | `cutter new <folder> --media <path>` | Create a project folder with `cutter.toml`, `AGENTS.md` and `CLAUDE.md` |
 | `cutter doctor [--json]` | Check Docker, image, speech model, FilmCraft, footage access and disk space, and show how to fix what's missing |
-| `cutter analyze` | Clip list, transcripts with word timestamps, contact sheets, film strips |
+| `cutter analyze` | Clip list, transcripts with word timestamps, contact sheets, film strips; per clip the usable ranges, camera moves, people, sound and place |
 | `cutter music analyze` / `license` | Beats, bars and loudness; license check |
 | `cutter plan <cut> [--new]` | Write the next cut's edit list from `plan.py` (the feedback as code) |
 | `cutter retime <cut>` | Snap cuts to the music |
@@ -248,7 +248,7 @@ If the tags say nothing, the agent asks you instead of guessing.
 | `cutter filmcraft gui` | Start the FilmCraft desktop app with its control channel (optional) |
 | `cutter map` | Overview and route maps for intros |
 | `cutter review-data <cut>` | Prepare a cut for the review app |
-| `cutter review password <name>` | Add a reviewer or change their password |
+| `cutter review password <name>` | Add a reviewer or change their password; `--generate` makes one and prints it once, `--delete` removes the reviewer |
 | `cutter serve` | Run the review app |
 | `cutter feedback fetch` / `reply` | Read the comments; post the agent's replies |
 | `cutter deploy` | Publish the review app on a server (SSH, settings in `deploy.env`) |

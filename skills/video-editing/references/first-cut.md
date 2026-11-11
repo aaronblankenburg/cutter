@@ -20,11 +20,18 @@ Then create the project: `cutter new <folder> --media <footage>` (`--language de
 
 `cutter analyze` writes `analysis/clips.json` (one entry per clip: id `C001`…, time, length, size, words spoken),
 transcripts with a time for every word (`analysis/transcripts/C001.json`), `analysis/transcript_all.txt`, contact
-sheets (`analysis/sheets/`) and film strips (`analysis/strips/`). Hours of footage take hours on a CPU: start it
-in the background and say so. `--image` adds sharpness, shake and exposure per second (useful for picking takes).
+sheets (`analysis/sheets/`), film strips (`analysis/strips/`) and `analysis/quality.txt`: per clip the usable
+ranges, the flaws, the camera moves, people and objects, the sound, the place and other takes of the same shot.
+Hours of footage take hours on a CPU: start it in the background and say so.
 
 Then look for yourself:
 - Read `transcript_all.txt` completely. Mark the sentences that carry the story.
+- Read `quality.txt` next to the transcript. Take shots from the `usable` ranges and prefer the steady ones; cut
+  into a pan or out of it where `camera` says it starts or has come to rest, not in the middle. `similar` names
+  other takes of a shot: compare them and take the best. `wind`, `rumble` and `clipping` say where the original
+  sound will not carry a scene. The bar under each contact sheet shows the same at a glance (green usable, red
+  flawed, blue speech, orange wind). These are measurements, not judgments: a shaky shot can be the right one, and
+  a "usable" one can be dull. The numbers per second are in `analysis/image/<id>.json` (`docs/formats.md`).
 - Look at the contact sheets of every clip; `cutter tool window <out.jpg> C017:30:8` shows a time window frame by
   frame, `cutter tool frames <out.jpg> "C017:31,35;C023:4"` single frames.
 - Whisper mishears names and quiet speech: check doubtful sentences with `cutter tool asr C017:30:38:full`.
@@ -63,8 +70,13 @@ Look at the export yourself before anyone else does: frames at every section cha
 
 ## 6. Review
 
-Ask before starting the review app in the network. The user adds reviewers with `cutter review password <name>`
-(they type the password themselves), then `cutter serve` prints the addresses to share. Check the app on a phone
+Ask before starting the review app in the network, and ask for the reviewers' names. Add each one with
+`cutter review password <name> --generate --json`: it makes a password, stores only its hash and returns the
+password once in `password`. Give the user name, password and address to pass on; you cannot read the password
+again later, only replace it (`--dry-run --json` shows in `exists` whether a name is already there). Never run
+`cutter review password <name>` without `--generate` yourself: it asks for the password in a terminal, which you
+do not have. A user who would rather choose the password runs that in a terminal of their own. Then
+`cutter serve` prints the addresses to share. Check the app on a phone
 first; most reviewers watch there.
 
 ## Lessons from real cuts

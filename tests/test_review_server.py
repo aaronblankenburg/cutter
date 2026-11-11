@@ -160,6 +160,47 @@ class PasswordRequired(unittest.TestCase):
             r = run_cutter("serve", "--dry-run", "--json", cwd=d)
             self.assertEqual(json.loads(r.stdout)["bind"], "0.0.0.0")
 
+    def test_review_password_generate_needs_no_terminal(self):
+        with TempDir() as d:
+            (d / "cutter.toml").write_text("", encoding="utf-8")
+            f = d / ".cutter" / "review" / "htpasswd"
+            r = run_cutter("review", "password", "alice", "--generate", "--dry-run", "--json", cwd=d, input="")
+            self.assertFalse(json.loads(r.stdout)["exists"])
+            self.assertFalse(f.exists())
+            r = run_cutter("review", "password", "alice", "--generate", "--json", cwd=d, input="")
+            first = json.loads(r.stdout)
+            self.assertRegex(first["password"], r"^[a-z2-9]{4}(-[a-z2-9]{4}){3}$")
+            self.assertFalse(first["replaced"])
+            self.assertNotIn(first["password"], f.read_text())
+            self.assertNotIn(first["password"], r.stderr)
+            self.assertEqual(oct(f.stat().st_mode & 0o777), "0o600")
+            sys.path.insert(0, str(SERVER.parent))
+            import server
+            stored = dict(z.split(":", 1) for z in f.read_text().splitlines())
+            self.assertTrue(server.password_ok(first["password"], stored["alice"]))
+            r = run_cutter("review", "password", "alice", "--generate", cwd=d, input="")      # for people: shown once
+            self.assertIn("password: ", r.stdout)
+            self.assertEqual(f.read_text().count("alice:"), 1)
+            run_cutter("review", "password", "bob", "--generate", "--json", cwd=d, input="")
+            r = run_cutter("review", "password", "alice", "--delete", "--json", cwd=d, input="")
+            self.assertTrue(json.loads(r.stdout)["deleted"])
+            self.assertTrue(f.read_text().startswith("bob:scrypt$"))
+
+    def test_review_password_without_a_terminal_says_what_to_do(self):
+        with TempDir() as d:
+            (d / "cutter.toml").write_text("", encoding="utf-8")
+            r = run_cutter("review", "password", "alice", "--json", cwd=d, input="", check=False)
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("--generate", json.loads(r.stdout)["hint"])
+            self.assertNotIn("Traceback", r.stderr)
+            self.assertFalse((d / ".cutter" / "review" / "htpasswd").exists())
+            for typed in ("too short\ntoo short\n", "correct horse battery\ncorrect horse staple\n"):
+                r = run_cutter("review", "password", "alice", cwd=d, input=typed, check=False)
+                self.assertEqual(r.returncode, 2)
+                self.assertNotIn("Traceback", r.stderr)
+            r = run_cutter("review", "password", "a b", "--generate", cwd=d, input="", check=False)
+            self.assertEqual(r.returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
