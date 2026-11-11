@@ -463,7 +463,7 @@ case $cmd in
       say "Stop it with Ctrl+C (or: docker stop cutter-review-$port)."
     fi ;;
   review)
-    opt -i                                         # the password comes from the terminal (or from stdin)
+    opt -i                                         # the password comes from the terminal or stdin (--generate: neither)
     if [ -n "$TTY" ]; then opt -t; fi ;;
   deploy|feedback)
     if [ -n "$TTY" ]; then opt -it; fi

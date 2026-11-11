@@ -211,6 +211,10 @@ def probe_clip(path, base):
                      "vfr": bool(fps and avg and abs(fps - avg) / fps > 0.01)})
     if audio:
         clip.update({"audio_rate": int(frac(audio.get("sample_rate"))), "audio_channels": audio.get("channels")})
+    from .telemetry import gps_from_tags
+    gps = gps_from_tags(tags)
+    if gps:
+        clip["gps"] = gps
     return clip
 
 
@@ -361,6 +365,68 @@ def do_sheets(clips, out, force, max_frames, interval):
             make_strip(frames, out / "strips" / f'{c["id"]}.jpg')
             log(f"  [{k}/{len(pending)}] {c['id']}  {c['rel_path']}")
     return len(pending)
+
+
+BAR_MARK = "cutter-quality-bar:"          # JPEG comment of a sheet with a bar: the height of the sheet without it
+BAR_COLORS = {"steady": (60, 170, 80), "moving": (150, 190, 70), "flaw": (200, 60, 50), "none": (70, 70, 70),
+              "speech": (70, 140, 230), "wind": (235, 150, 40)}
+
+
+def quality_bar(sheet, data):
+    """Draw the timeline of a clip under its contact sheet: green = usable and steady, light green = usable with the
+    camera moving, red = flawed; below it blue = speech, orange = wind. Replaces the bar of an earlier run."""
+    from PIL import Image, ImageDraw
+    with Image.open(sheet) as im:
+        mark = im.info.get("comment") or b""
+        mark = mark.decode("ascii", "replace") if isinstance(mark, bytes) else str(mark)
+        im = im.convert("RGB")
+    if mark.startswith(BAR_MARK) and mark[len(BAR_MARK):].isdigit():
+        im = im.crop((0, 0, im.width, int(mark[len(BAR_MARK):])))
+    dur = data.get("duration") or 0
+    if dur <= 0:
+        return False
+    pad, bar, thin, legend = 6, 12, 5, 18
+    out = Image.new("RGB", (im.width, im.height + bar + thin + legend + 8), (24, 24, 24))
+    out.paste(im, (0, 0))
+    d = ImageDraw.Draw(out)
+    x0, x1, y = pad, im.width - pad, im.height + 2
+    px = lambda t: x0 + (x1 - x0) * min(1.0, max(0.0, t / dur))
+    d.rectangle((x0, y, x1, y + bar), fill=BAR_COLORS["none"])
+    for r in data.get("flaws") or []:
+        if r["why"] != ["short"]:
+            d.rectangle((px(r["start"]), y, px(r["end"]), y + bar), fill=BAR_COLORS["flaw"])
+    for r in data.get("usable") or []:
+        d.rectangle((px(r["start"]), y, px(r["end"]), y + bar), fill=BAR_COLORS["steady" if r["steady"] else "moving"])
+    audio = data.get("audio") or {}
+    for key in ("speech", "wind", "rumble"):
+        for r in audio.get(key) or []:
+            d.rectangle((px(r["start"]), y + bar + 1, px(r["end"]), y + bar + thin), fill=BAR_COLORS["speech" if key == "speech" else "wind"])
+    small, x = font(12), x0
+    for key, label in (("steady", "usable, steady"), ("moving", "usable, moving"), ("flaw", "flawed"), ("speech", "speech"),
+                       ("wind", "wind or rumble")):
+        d.rectangle((x, y + bar + thin + 7, x + 9, y + bar + thin + 16), fill=BAR_COLORS[key])
+        d.text((x + 13, y + bar + thin + 4), label, fill=(170, 170, 170), font=small)
+        x += 22 + d.textlength(label, font=small)
+    d.text((x1 - d.textlength(fmt_ts(dur, 0), font=small), y + bar + thin + 4), fmt_ts(dur, 0), fill=(170, 170, 170), font=small)
+    out.save(sheet, quality=65, comment=f"{BAR_MARK}{im.height}".encode("ascii"))
+    return True
+
+
+def add_quality_bars(out, image_dir):
+    """Add the quality timeline to every contact sheet that has an image analysis; returns how many."""
+    n = 0
+    for sheet in sorted((Path(out) / "sheets").glob("*.jpg")):
+        f = Path(image_dir) / f"{sheet.stem}.json"
+        if not f.exists():
+            continue
+        try:
+            if sheet.stat().st_mtime >= f.stat().st_mtime and sheet.read_bytes().find(BAR_MARK.encode()) >= 0:
+                continue                                  # the bar is up to date; saving again would only cost quality
+            data = json.loads(f.read_text(encoding="utf-8"))
+            n += bool("usable" in data and quality_bar(sheet, data))
+        except (ValueError, OSError, ImportError):
+            continue
+    return n
 
 
 def speech_label(c):

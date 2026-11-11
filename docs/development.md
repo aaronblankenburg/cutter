@@ -31,6 +31,7 @@ not a dry run; subprocesses get an empty HOME and no ssh agent (`test_feedback_d
 | `test_review_server.py` | Basic Auth (401/200/503), range requests (206/416), the comment API, `review password`, `serve` refusing to start without a password |
 | `test_feedback_deploy.py` | `feedback fetch`/`reply` on a local database, `deploy --dry-run`, server templates |
 | `test_launcher_agent.py` | the launcher under dash with a Docker stub (mounts, paths, ports, macOS branches), `agent setup` with a temporary HOME, the skill and plugin manifests |
+| `test_footage_quality.py` | camera moves, usable ranges and flaws from samples; wind against an engine; GoPro GPMF and DJI flight logs built at run time; the quality bar; the whole analysis on a generated clip with a known pan and blur (needs OpenCV, so it runs in the image) |
 | `test_cli.py` | help for every command, JSON results and errors, `new`, `plan`, `doctor`, dry runs |
 | `test_docs.py` | the legacy table in formats.md, relative links |
 | `test_filmcraft_headless.py` | builds the demo's FilmCraft project with the real CLI and renders frames (needs `filmcraft-cli`) |

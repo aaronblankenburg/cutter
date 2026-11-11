@@ -34,7 +34,7 @@ accepts the configuration. It needs `sudo`: an agent asks before running it. The
 
 **3. Passwords** are set on the server, one per reviewer:
 `ssh -t user@review.example.org python3 /home/user/cutter/app/set_password.py alice` (stores only a scrypt hash in
-`htpasswd`).
+`htpasswd`). With `--generate` the script makes the password and prints it once; that needs no terminal (no `-t`).
 
 **4. Publish cuts:**
 

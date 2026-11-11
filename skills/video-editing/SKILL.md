@@ -20,7 +20,7 @@ launcher `bin/cutter`, which runs the tools in a Docker image. Below, `cutter` m
 2. Run `cutter doctor --json`. Each check that is not ok has a `fix`. Work through the required ones.
 3. **Ask first** before you:
    - download anything large: the Docker image (about 0.7 GB download, 1.8 GB on disk), the Whisper model
-     (about 1.6 GB, fetched by the first `cutter analyze`)
+     (about 1.6 GB, fetched by the first `cutter analyze`, which also fetches 20 MB of detection models)
    - use `sudo`, install system packages, or add the user to the `docker` group
    - change the shell configuration, `~/.claude`, `~/.codex` or `~/.agents` (for example `cutter agent setup`)
    - deploy anything (`cutter deploy`), start the review app in the network (`cutter serve`)
@@ -47,13 +47,14 @@ the story, music (license first, then beats), the edit list, render, review. The
 ```sh
 cutter new <folder> --media <footage>       # then cd <folder>
 cutter doctor
-cutter analyze                              # transcripts, contact sheets, film strips -> analysis/
+cutter analyze                              # transcripts, contact sheets, quality.txt -> analysis/
 cutter music license && cutter music analyze
 # write cuts/cut1/edit.json and cuts/cut1/decisions.json
 cutter retime cut1 && cutter timeline cut1
 cutter filmcraft build cut1 && cutter filmcraft export cut1
 cutter review-data cut1
-cutter review password <name> && cutter serve   # ask first; the user types the password
+cutter review password <name> --generate --json   # makes the password; pass name and password on to the user
+cutter serve                                # ask first
 ```
 
 ## 4. Every further cut

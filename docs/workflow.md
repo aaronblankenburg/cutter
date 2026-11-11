@@ -42,10 +42,19 @@ cutter new <folder> --media <footage> [--media <more footage>] [--title "…"] [
 | `analysis/transcript_all.txt` | all transcripts in one readable file |
 | `analysis/sheets/`, `analysis/strips/` | contact sheets and film strips |
 | `analysis/overview/` | an overview by folder and day (`--list` shows only this) |
+| `analysis/quality.txt` | per clip: usable ranges, flaws, camera moves, people and objects, sound, place, other takes |
+| `analysis/image/<id>.json` | the measurements behind it, per second ([formats.md](formats.md#image-and-sound-analysis)) |
 
-Clips are numbered in recording order. Re-running only adds what is new (`--force` redoes everything). `--image`
-adds sharpness, shake, exposure and scene changes per second (`analysis/image/`), which `retime` uses to avoid
-blurry frames at cut points. `--language` (or `language` in cutter.toml) fixes the spoken language; otherwise
+Clips are numbered in recording order. Re-running only adds what is new (`--force` redoes everything).
+
+The image and sound analysis measures sharpness, exposure, colour and the motion of the camera five times a second
+and looks for faces, people and objects once a second. From that it derives where a clip is usable (sharp, steady
+enough, properly exposed), how the camera moves (static, pan, tilt, push in …) and what the shot size is; from the
+sound the loudness, speech, wind and clipping; from the file the place and, for GoPro and DJI, the track. Clips
+that look like another take of the same shot are named. Every contact sheet gets a timeline of this below its
+pictures: green is usable, red flawed, blue speech, orange wind. `retime` uses the measurements to avoid flawed
+frames at cut points. Several clips are measured at a time; 27 minutes of 720p footage took 8 minutes on a 16-core computer. `--no-image` skips it.
+The two detection models (20 MB, MIT and Apache-2.0) are downloaded once. `--language` (or `language` in cutter.toml) fixes the spoken language; otherwise
 Whisper detects it per clip.
 
 Transcription runs on the CPU with int8 (see the README for timings). The model is downloaded once (about 1.6 GB)
@@ -97,9 +106,12 @@ the live mode with the desktop app and the configuration: [filmcraft.md](filmcra
 
 ```sh
 cutter review-data cut1          # exports/cut1.mp4 (or a rough render) -> .cutter/review/data/cuts/cut1/
-cutter review password alice     # once per reviewer; only a scrypt hash is stored
+cutter review password alice     # once per reviewer; asks for the password, only a scrypt hash is stored
 cutter serve                     # prints the addresses: localhost, the LAN address, <name>.local on macOS
 ```
+
+`cutter review password alice --generate` makes the password instead of asking for it and prints it once; it needs
+no terminal, so an agent can run it (with `--json` the password is in `password`). `--delete` removes a reviewer.
 
 The review app runs in the container and is published on all interfaces by default (`--bind 127.0.0.1` keeps it
 on this computer; `--port` or `CUTTER_REVIEW_PORT` changes the port). It never starts without a password. It speaks
