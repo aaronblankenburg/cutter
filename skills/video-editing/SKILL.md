@@ -20,7 +20,7 @@ launcher `bin/cutter`, which runs the tools in a Docker image. Below, `cutter` m
 2. Run `cutter doctor --json`. Each check that is not ok has a `fix`. Work through the required ones.
 3. **Ask first** before you:
    - download anything large: the Docker image (about 0.7 GB download, 1.8 GB on disk), the Whisper model
-     (about 1.6 GB, fetched by the first `cutter analyze`, which also fetches 20 MB of detection models)
+     (about 1.6 GB, fetched by the first `cutter analyze`, which also fetches 57 MB of detection models)
    - use `sudo`, install system packages, or add the user to the `docker` group
    - change the shell configuration, `~/.claude`, `~/.codex` or `~/.agents` (for example `cutter agent setup`)
    - deploy anything (`cutter deploy`), start the review app in the network (`cutter serve`)

@@ -85,6 +85,8 @@ def c_analyze(a, out):
         try:
             r["image"] = image_analysis.run(target / "clips.json", p.path("image_analysis"), only=a.only, force=a.force,
                                             device=a.device, text_path=target / "quality.txt",
+                                            people_path=target / "people.json",
+                                            recognize=(p.get("image_analysis") or {}).get("recognize_faces", True),
                                             content_tags=(p.get("image_analysis") or {}).get("content_tags"))
         except CutterError as ex:
             if ex.code != MISSING:
@@ -93,6 +95,8 @@ def c_analyze(a, out):
         else:
             r["image"]["sheets"] = analyze.add_quality_bars(target, p.path("image_analysis"))
             r["text"] = (r.get("text") or "") + f"\nUsable ranges, camera moves, people, sound and place per clip: {target / 'quality.txt'}"
+            if r["image"]["people"]:
+                r["text"] += f"\nPeople by their faces ({len(r['image']['people'])}): {target / 'people.jpg'} – name them with cutter people name"
     out.result(r, r.get("text"))
 
 
@@ -314,6 +318,35 @@ def c_review(a, out):
         out.result(r, text)
 
 
+def c_people(a, out):
+    p = _project(a)
+    from . import image_analysis, people
+    analysis = p.path("clips").parent
+    file = analysis / "people.json"
+    if a.people_cmd == "list":
+        data = people.load(file)
+        rows = [{k: x[k] for k in ("id", "name", "seconds")} | {"clips": sorted(x["clips"])} for x in data["people"]]
+        text = "\n".join(f'  {x["id"]:<4} {x["name"] or "(no name)":<20} {x["seconds"]:>4} s  {", ".join(x["clips"][:12])}'
+                         + (" …" if len(x["clips"]) > 12 else "") for x in rows)
+        return out.result({"file": str(file), "sheet": str(file.with_suffix(".jpg")) if data.get("sheet") else None, "people": rows},
+                          (f"People by their faces (pictures: {file.with_suffix('.jpg')}):\n{text}" if rows else
+                           "No people found yet (cutter analyze finds them by their faces)."))
+    if a.people_cmd == "name":
+        who = people.rename(file, a.id, a.name, dry_run=a.dry_run)
+        text = f'{who["id"]} is {who["name"] or "without a name again"}'
+    else:
+        who = people.merge(file, a.ids, dry_run=a.dry_run)
+        text = f'{", ".join(x.upper() for x in a.ids[1:])} merged into {who["id"]}{" " + who["name"] if who["name"] else ""}'
+    r = {"file": str(file), "id": who["id"], "name": who["name"]}
+    if a.dry_run:
+        return _dry(out, r, "  " + text)
+    clips = read_json(p.path("clips"))
+    known = people.update(clips, p.path("image_analysis"), file)["people"]
+    if (analysis / "quality.txt").exists():
+        (analysis / "quality.txt").write_text(image_analysis.readable(clips, p.path("image_analysis"), known), encoding="utf-8")
+    out.result(r, text)
+
+
 def c_serve(a, out):
     p = _project(a, required=False)
     data = p.path("review")
@@ -514,6 +547,14 @@ def parser():
     q.add_argument("--generate", action="store_true", help="make a random password and print it once (needs no terminal)")
     q.add_argument("--delete", action="store_true", help="remove the reviewer")
 
+    p = cmd("people", c_people, "the people cutter analyze found by their faces: list, name, merge")
+    ps = p.add_subparsers(dest="people_cmd", required=True)
+    ps.add_parser("list", help="who was found, for how long and in which clips (pictures: analysis/people.jpg)", parents=[common])
+    q = ps.add_parser("name", help='give a person a name, e.g. cutter people name P1 "Anna" (an empty name removes it)', parents=[common, dry])
+    q.add_argument("id"); q.add_argument("name")
+    q = ps.add_parser("merge", help="two or more IDs are the same person; the first ID stays", parents=[common, dry])
+    q.add_argument("ids", nargs="+", metavar="id")
+
     p = cmd("serve", c_serve, "run the review app (Basic Auth required)", (common, dry))
     p.add_argument("--port", type=int, help="port (default: CUTTER_REVIEW_PORT or 8089)")
     p.add_argument("--bind", help="address to listen on (default: all interfaces; 127.0.0.1 = only this computer)")
@@ -567,6 +608,7 @@ def main(argv=None):
     a.json = getattr(a, "json", False)
     a.project = getattr(a, "project", None)
     out = Output(a.json)
+    os.environ["CUTTER_JSON"] = "1" if a.json else ""        # progress messages (util.log) then go to stderr
     if not getattr(a, "fn", None):
         ap.print_help()
         return 0

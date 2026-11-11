@@ -43,6 +43,7 @@ cutter new <folder> --media <footage> [--media <more footage>] [--title "…"] [
 | `analysis/sheets/`, `analysis/strips/` | contact sheets and film strips |
 | `analysis/overview/` | an overview by folder and day (`--list` shows only this) |
 | `analysis/quality.txt` | per clip: usable ranges, flaws, camera moves, people and objects, sound, place, other takes |
+| `analysis/people.json`, `people.jpg` | the people found by their faces, with the clips and times they are in ([formats.md](formats.md#peoplejson)) |
 | `analysis/image/<id>.json` | the measurements behind it, per second ([formats.md](formats.md#image-and-sound-analysis)) |
 
 Clips are numbered in recording order. Re-running only adds what is new (`--force` redoes everything).
@@ -51,10 +52,13 @@ The image and sound analysis measures sharpness, exposure, colour and the motion
 and looks for faces, people and objects once a second. From that it derives where a clip is usable (sharp, steady
 enough, properly exposed), how the camera moves (static, pan, tilt, push in …) and what the shot size is; from the
 sound the loudness, speech, wind and clipping; from the file the place and, for GoPro and DJI, the track. Clips
-that look like another take of the same shot are named. Every contact sheet gets a timeline of this below its
+that look like another take of the same shot are named. Faces that are large enough are compared with each other,
+so that the same person is found again in other clips (`P1`, `P2` …; `cutter people name P1 "Ada"` gives a name,
+`cutter people merge P1 P4` joins two IDs of one person, `cutter people list` shows them). This runs on your
+computer only. Every contact sheet gets a timeline of this below its
 pictures: green is usable, red flawed, blue speech, orange wind. `retime` uses the measurements to avoid flawed
 frames at cut points. Several clips are measured at a time; 27 minutes of 720p footage took 8 minutes on a 16-core computer. `--no-image` skips it.
-The two detection models (20 MB, MIT and Apache-2.0) are downloaded once. `--language` (or `language` in cutter.toml) fixes the spoken language; otherwise
+The three models for this (57 MB, MIT and Apache-2.0) are downloaded once. `--language` (or `language` in cutter.toml) fixes the spoken language; otherwise
 Whisper detects it per clip.
 
 Transcription runs on the CPU with int8 (see the README for timings). The model is downloaded once (about 1.6 GB)

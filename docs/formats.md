@@ -61,6 +61,9 @@ phase = 2                       # which beat (0-3) is the first downbeat, overri
 entry = "first_downbeat"        # or { kind = "downbeat_before_picture", max_s = 0.9 }
 beats_from = "M1"               # use another cue's beats (a second excerpt of the same track)
 
+[image_analysis]
+recognize_faces = false         # do not work out who is who (default: true; see people.json)
+
 [filmcraft]
 config = "filmcraft.json"       # titles, credits, map, captions … (see below)
 export_preset = "Match Source – Adaptive Low Bitrate"
@@ -102,7 +105,7 @@ there when the file names the place (phones do).
 the clip, people and objects, sound, place, other takes). The numbers behind it are in `analysis/image/C001.json`:
 
 ```json
-{"id": "C001", "version": 2, "duration": 34.2, "units": {…},
+{"id": "C001", "version": 3, "duration": 34.2, "units": {…},
  "usable": [{"start": 2.4, "end": 11.0, "camera": "static", "steady": true}, …],
  "flaws":  [{"start": 0.0, "end": 2.4, "why": ["shaky"]}, …],
  "camera": [{"start": 0.0, "end": 11.2, "move": "static", "speed": 0.2, "shake": 0.1},
@@ -112,6 +115,7 @@ the clip, people and objects, sound, place, other takes). The numbers behind it 
            "clipping": [], "silence": []},
  "telemetry": {"source": "gopro", "gps": {"lat": 36.8, "lon": 10.18, "alt": 12.0}, "track": [[0.0, 36.8, 10.18, 12.0, 18.0], …],
                "distance_m": 340, "speed_kmh": {"mean": 18.0, "max": 31.5}, "gyro": [{"t": 0.0, "turn": 4.1, "shake": 9.3}, …]},
+ "faces": [{"seconds": [3, 4, 5, 9], "faces": 4, "size": 0.22, "thumb": "faces/C001_0.jpg", "vector": [0.031, …]}],
  "per_second": [{"t": 0, "sharpness": 212.4, "exposure": {"mean": 118.0, "too_dark": 0.0, "clipped": 0.02},
                  "color": {"warmth": 0.06, "saturation": 0.31}, "pan": 0.3, "pan_x": -0.2, "pan_y": 0.1, "zoom": 0.0,
                  "shake": 0.2, "motion": 1.1, "faces": 1, "face": 0.22, "people": 2, "person": 0.8,
@@ -137,11 +141,40 @@ the clip, people and objects, sound, place, other takes). The numbers behind it 
   channels do not share); cameras that record one microphone get `rumble` instead, which is wind or an engine.
 - **`telemetry`** has the place from the file's metadata, and from GoPro (GPMF) and DJI (flight log `.SRT`) the
   track as `[second, lat, lon, alt, km/h]` and, for GoPro, the gyroscope in degrees per second.
+- **`faces`** are the people of the clip, told apart by their faces: the seconds each is seen in, a picture
+  (`analysis/image/faces/`) and the vector that describes the face. Who they are across clips is in `people.json`
+  (below).
 - **`similar`** names clips recorded within half an hour that look alike: probably other takes of the same shot.
 - `horizon_tilt` (degrees) appears only when one long, nearly level line stays put through the clip.
 
-`analysis/image/_index.json` holds every clip's `summary`. Files of `version` 1 (before these fields) are measured
-again by the next `cutter analyze`.
+`analysis/image/_index.json` holds every clip's `summary`. Files of an older `version` (before these fields) are
+measured again by the next `cutter analyze`.
+
+### people.json
+
+`analysis/people.json` lists the people found by their faces, most seen first; `analysis/people.jpg` shows a row
+of faces for each, and `quality.txt` says who is in a clip and when (`who`).
+
+```json
+{"version": 1, "sheet": "people.jpg", "unassigned_faces": 7,
+ "people": [{"id": "P1", "name": "Ada", "seconds": 148, "clips": {"C001": [{"start": 3.0, "end": 12.0}], …},
+             "pictures": ["faces/C001_0.jpg", …], "vectors": [[0.031, …]]}]}
+```
+
+- A face is compared with others when it is at least 48 pixels high and clearly a face, once a second. Two faces
+  are the same person when their vectors (SFace, 128 numbers) are similar enough; groups of faces are joined when
+  their members are similar on average. A face seen for less than three
+  seconds in the whole project gets no ID (`unassigned_faces`).
+- `cutter people name P1 "Ada"` names a person; `cutter people merge P1 P4` says two IDs are one person (the first
+  stays). IDs, names and merges survive a new analysis, because a person is found again through `vectors`. The
+  grouping errs on the careful side: next to the people it is sure of, expect a few IDs with one or two dark,
+  blurred or turned-away faces of people who already have an ID, and the same person with and without sunglasses
+  or a helmet may get two IDs (merge them). Faces in footage that was recorded upside down are found but not
+  recognised. Two
+  people who look alike, or small and blurred faces, may share one (that cannot be corrected yet). Check
+  `people.jpg` before relying on it.
+- The vectors are biometric data. The file stays in the project folder; it is not part of the review data and is
+  never deployed. `recognize_faces = false` in `[image_analysis]` leaves the step out.
 
 ## music.json
 

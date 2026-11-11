@@ -247,6 +247,134 @@ class QualityBar(unittest.TestCase):
                 self.assertEqual(im.height, height)
 
 
+def face_vectors(seed, n, spread=0.25, size=128):
+    """n vectors around one direction, as the faces of one person are."""
+    import numpy as np
+    rnd = np.random.default_rng(seed)
+    centre = rnd.normal(size=size)
+    centre /= np.linalg.norm(centre)
+    out = centre + spread * rnd.normal(size=(n, size)) / math.sqrt(size) * 3
+    return out / np.linalg.norm(out, axis=1, keepdims=True)
+
+
+@unittest.skipUnless(NUMPY, "needs numpy")
+class People(unittest.TestCase):
+    def clip_file(self, d, cid, persons):
+        """persons: [(seed, seconds)] -> the "faces" of a clip file as image_analysis writes them."""
+        from cutter import people
+        found = [{"t": t, "v": v, "size": 0.2, "score": 0.9}
+                 for seed, secs in persons for t, v in zip(secs, face_vectors(seed, len(secs)))]
+        faces = people.clip_faces(found)
+        for g in faces:
+            g.pop("best")
+        (d / "image").mkdir(exist_ok=True)
+        (d / "image" / f"{cid}.json").write_text(json.dumps({"id": cid, "faces": faces}))
+        return faces
+
+    def test_faces_of_a_clip_are_grouped_by_person(self):
+        with TempDir() as d:
+            faces = self.clip_file(d, "C001", [(1, range(0, 8)), (2, range(3, 6))])
+            self.assertEqual([g["faces"] for g in faces], [8, 3])
+            self.assertEqual(faces[1]["seconds"], [3, 4, 5])
+            self.assertEqual(len(faces[0]["vector"]), 128)
+
+    def test_two_people_whose_faces_have_much_in_common_stay_two(self):
+        # Faces share a lot (they are all faces, seen by the same camera). The centres of two people's faces are
+        # then more alike than any two of their faces; grouping by the centres would make one person of them.
+        import numpy as np
+        from cutter import people
+        rnd = np.random.default_rng(5)
+        common, a, b = (v / np.linalg.norm(v) for v in rnd.normal(size=(3, 128)))
+        noise = rnd.normal(size=(40, 128))
+        noise /= np.linalg.norm(noise, axis=1, keepdims=True)
+        faces = [0.55 * common + 0.5 * (a if k < 20 else b) + 0.67 * noise[k] for k in range(40)]
+        centres = people.unit([np.sum(faces[:20], axis=0), np.sum(faces[20:], axis=0)])
+        self.assertGreater(float(centres[0] @ centres[1]), people.SAME)
+        order = rnd.permutation(40)
+        labels = people.group([faces[k] for k in order])
+        self.assertEqual(len(set(labels)), 2)
+        self.assertEqual(len({(labels[n], k < 20) for n, k in enumerate(order)}), 2)
+
+    def test_people_are_found_across_clips_and_keep_id_and_name(self):
+        from cutter import people
+        from cutter.util import CutterError
+        with TempDir() as d:
+            clips = [{"id": f"C00{k}", "duration": 20.0} for k in (1, 2, 3)]
+            self.clip_file(d, "C001", [(1, range(0, 8)), (2, range(3, 6))])
+            self.clip_file(d, "C002", [(2, range(0, 10))])
+            self.clip_file(d, "C003", [(3, [4])])                         # seen once: no ID
+            file = d / "people.json"
+            data = people.update(clips, d / "image", file)
+            self.assertEqual([(p["id"], sorted(p["clips"]), p["seconds"]) for p in data["people"]],
+                             [("P1", ["C001", "C002"], 13), ("P2", ["C001"], 8)])
+            self.assertEqual(data["people"][0]["clips"]["C001"], [{"start": 3, "end": 6}])
+            self.assertEqual(data["unassigned_faces"], 1)
+            people.rename(file, "p2", "Ada")
+            with self.assertRaises(CutterError):
+                people.rename(file, "P1", "ada")                          # the name is taken
+            with self.assertRaises(CutterError):
+                people.rename(file, "P9", "Bo")
+            # a new analysis: another clip with the second person, and someone new who is seen more than anyone
+            clips.append({"id": "C004", "duration": 60.0})
+            self.clip_file(d, "C004", [(4, range(0, 40)), (1, range(40, 44))])
+            again = people.update(clips, d / "image", file)["people"]
+            self.assertEqual([(p["id"], p["name"], sorted(p["clips"])) for p in again],
+                             [("P1", "", ["C001", "C002"]), ("P2", "Ada", ["C001", "C004"]), ("P3", "", ["C004"])])
+
+    def test_merged_people_stay_one(self):
+        from cutter import people
+        with TempDir() as d:
+            clips = [{"id": "C001", "duration": 20.0}, {"id": "C002", "duration": 20.0}]
+            self.clip_file(d, "C001", [(1, range(0, 8))])
+            self.clip_file(d, "C002", [(2, range(0, 5))])                 # the same person with a helmet, say
+            file = d / "people.json"
+            self.assertEqual(len(people.update(clips, d / "image", file)["people"]), 2)
+            people.rename(file, "P2", "Ada")
+            self.assertEqual(people.merge(file, ["P1", "P2"], dry_run=True)["name"], "Ada")
+            self.assertEqual(len(people.load(file)["people"]), 2)         # the dry run wrote nothing
+            people.merge(file, ["P1", "P2"])
+            one = people.update(clips, d / "image", file)["people"]
+            self.assertEqual([(p["id"], p["name"], sorted(p["clips"]), len(p["vectors"])) for p in one],
+                             [("P1", "Ada", ["C001", "C002"], 2)])
+
+    def test_people_command(self):
+        from helpers import run_cutter
+        with TempDir() as d:
+            (d / "cutter.toml").write_text("", encoding="utf-8")
+            (d / "analysis").mkdir()
+            a = d / "analysis"
+            self.clip_file(a, "C001", [(1, range(0, 8)), (2, range(3, 6))])
+            (a / "clips.json").write_text(json.dumps([{"id": "C001", "duration": 20.0}]))
+            self.assertEqual(json.loads(run_cutter("people", "list", "--json", cwd=d).stdout)["people"], [])
+            from cutter import people
+            people.update([{"id": "C001", "duration": 20.0}], a / "image", a / "people.json")
+            r = json.loads(run_cutter("people", "name", "P1", "Ada", "--dry-run", "--json", cwd=d).stdout)
+            self.assertTrue(r["dry_run"])
+            self.assertEqual(people.load(a / "people.json")["people"][0]["name"], "")
+            run_cutter("people", "name", "P1", "Ada", cwd=d)
+            r = json.loads(run_cutter("people", "merge", "P1", "P2", "--json", cwd=d).stdout)
+            self.assertEqual((r["id"], r["name"]), ("P1", "Ada"))
+            rows = json.loads(run_cutter("people", "list", "--json", cwd=d).stdout)["people"]
+            self.assertEqual([(p["id"], p["name"], p["seconds"], p["clips"]) for p in rows], [("P1", "Ada", 8, ["C001"])])
+            r = run_cutter("people", "name", "P7", "Bo", "--json", cwd=d, check=False)
+            self.assertEqual((r.returncode, json.loads(r.stdout)["code"]), (2, 2))
+
+    def test_quality_text_says_who(self):
+        from cutter import image_analysis
+        with TempDir() as d:
+            (d / "image").mkdir()
+            clip = {"id": "C001", "duration": 10.0, "created": "2024-05-01 09:00:00", "rel_path": "a.mp4"}
+            data = {"usable": [{"start": 0, "end": 10, "camera": "static", "steady": True}], "flaws": [],
+                    "camera": [{"start": 0, "end": 10, "move": "static", "speed": 0, "shake": 0}], "per_second": [],
+                    "summary": {"usable_s": 10.0}}
+            (d / "image" / "C001.json").write_text(json.dumps(data))
+            known = [{"id": "P1", "name": "Ada", "seconds": 4, "clips": {"C001": [{"start": 2, "end": 6}]}},
+                     {"id": "P2", "name": "", "seconds": 9, "clips": {"C007": [{"start": 0, "end": 9}]}}]
+            text = image_analysis.readable([clip], d / "image", known)
+            self.assertIn("who      P1 Ada 0:02.0-0:06.0", text)
+            self.assertIn("P2 (9 s in 1 clips)", text)
+
+
 @unittest.skipUnless(OPENCV, "needs OpenCV, numpy and ffmpeg (they are in the Docker image)")
 class WholeAnalysis(unittest.TestCase):
     """A clip made from one still picture: 3 s static, a 4 s pan to the right, static again, blurred from 9 to 11 s;
@@ -299,14 +427,17 @@ class WholeAnalysis(unittest.TestCase):
         self.assertEqual(len(soft), 1)
         self.assertAlmostEqual(soft[0]["start"], 9.0, delta=0.5)
         self.assertAlmostEqual(soft[0]["end"], 11.0, delta=0.5)
-        first = self.data["usable"][0]
-        self.assertEqual((first["start"], first["camera"], first["steady"]), (0.0, "static", True))
+        first, last = self.data["usable"][0], self.data["usable"][-1]
+        # the first range holds 5 s without a move and the pan of 4 s, found to half a second: either may prevail
+        self.assertEqual(first["start"], 0.0)
+        self.assertIn((first["camera"], first["steady"]), (("static", True), ("pan_right", False)))
+        self.assertEqual((last["camera"], last["steady"]), ("static", True))
         self.assertGreaterEqual(self.data["summary"]["usable_s"], 9.0)
         self.assertLessEqual(self.data["summary"]["usable_s"], 11.2)
 
     def test_sound_and_file_format(self):
         d = self.data
-        self.assertEqual(d["version"], 2)
+        self.assertEqual(d["version"], 3)
         self.assertEqual(d["audio"]["channels"], 1)                        # the two channels are identical
         self.assertEqual(d["audio"]["rumble"], [])
         self.assertAlmostEqual(d["per_second"][2]["level"], -21, delta=6)
@@ -321,7 +452,7 @@ class WholeAnalysis(unittest.TestCase):
     def test_a_second_run_measures_nothing_again(self):
         from cutter import image_analysis
         self.assertEqual(image_analysis.run(self.d / "clips.json", self.d / "image")["analyzed"], 0)
-        old = dict(self.data, version=1)
+        old = dict(self.data, version=2)
         (self.d / "image" / "C001.json").write_text(json.dumps(old))
         self.assertEqual(image_analysis.run(self.d / "clips.json", self.d / "image")["analyzed"], 1)   # an old file is redone
 

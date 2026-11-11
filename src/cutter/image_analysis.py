@@ -9,10 +9,12 @@ Writes one file <out>/<ID>.json per clip of clips.json with
   usable      the ranges worth cutting from; flaws: the rest with the reason (soft, shaky, whip, dark, clipped)
   audio       loudness, peak, and the ranges of speech, silence, wind and clipping
   telemetry   the place and, from action cameras and drones, the GPS track and the gyroscope
+  faces       the people of the clip by their faces (SFace), a picture of each in <out>/faces/; people.py finds the
+              same person across clips -> <analysis>/people.json
   summary     the figures of the clip, also in <out>/_index.json; similar: clips that look like another take
 and <analysis>/quality.txt, the same for reading: a few lines per clip. The retime step uses sharpness, shake and
-exposure to avoid flawed seconds. CPU is enough. The two detection models (20 MB) are downloaded once into the
-model volume, checksum verified; without them faces, people and objects are left out.
+exposure to avoid flawed seconds. CPU is enough. The three models (57 MB) are downloaded once into the model volume,
+checksum verified; without them faces, people, objects and who is who are left out.
 The tag list for CLIP comes from cutter.toml → image_analysis.content_tags (neutral defaults below).
 """
 import hashlib
@@ -29,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from . import quality
 from .util import CutterError, MISSING, dump_json, log, lufs, read_json
 
-VERSION = 2             # of the per-clip file; older files are measured again
+VERSION = 3             # of the per-clip file; older files are measured again
 
 CONTENT_TAGS = {
     "landscape": "a wide landscape", "road": "an asphalt road", "street": "a town street with buildings",
@@ -70,12 +72,15 @@ UNITS = {"sharpness": "variance of the Laplacian at 480 px width (higher = sharp
          "tags/shot_size": "CLIP ViT-B/32, probability within the tag list",
          "audio": "PANNs Cnn14 (SED), highest probability within the second"}
 
-MODELS = {  # name: (file, MB, sha256, url) – both under permissive licenses (MIT, Apache-2.0)
+MODELS = {  # name: (file, MB, sha256, url) – all under permissive licenses (MIT, Apache-2.0, Apache-2.0)
     "faces": ("face_detection_yunet_2023mar.onnx", 0.3, "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
               "https://github.com/opencv/opencv_zoo/raw/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/"
               "face_detection_yunet/face_detection_yunet_2023mar.onnx"),
     "objects": ("yolox_tiny.onnx", 20, "427cc366d34e27ff7a03e2899b5e3671425c262ea2291f88bb942bc1cc70b0f7",
                 "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_tiny.onnx"),
+    "recognition": ("face_recognition_sface_2021dec.onnx", 37, "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
+                    "https://github.com/opencv/opencv_zoo/raw/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/"
+                    "face_recognition_sface/face_recognition_sface_2021dec.onnx"),
 }
 COCO = ("person,bicycle,car,motorcycle,airplane,bus,train,truck,boat,traffic light,fire hydrant,stop sign,parking meter,"
         "bench,bird,cat,dog,horse,sheep,cow,elephant,bear,zebra,giraffe,backpack,umbrella,handbag,tie,suitcase,frisbee,"
@@ -83,6 +88,7 @@ COCO = ("person,bicycle,car,motorcycle,airplane,bus,train,truck,boat,traffic lig
         "cup,fork,knife,spoon,bowl,banana,apple,sandwich,orange,broccoli,carrot,hot dog,pizza,donut,cake,chair,couch,"
         "potted plant,bed,dining table,toilet,tv,laptop,mouse,remote,keyboard,cell phone,microwave,oven,toaster,sink,"
         "refrigerator,book,clock,vase,scissors,teddy bear,hair drier,toothbrush").split(",")
+FACE_PX, FACE_SCORE = 48, 0.85     # a face smaller or less certain than this is not compared with others
 SHOTS = ((0.35, "close-up"), (0.15, "medium close-up"), (0.07, "medium"))     # by the height of the largest face
 PEOPLE_SHOTS = ((0.6, "full"), (0.25, "wide"), (0.0, "very wide"))             # by the height of the largest person
 
@@ -119,13 +125,15 @@ def model_file(name, download=True):
 
 
 class Detector:
-    """Faces (YuNet) and objects (YOLOX-tiny) on one frame; either may be missing."""
+    """Faces (YuNet), who they are (SFace) and objects (YOLOX-tiny) on one frame; each may be missing."""
 
-    def __init__(self, faces=None, objects=None, threads=4):
+    def __init__(self, faces=None, objects=None, recognition=None, threads=4):
         import cv2
-        self.cv2, self.faces, self.objects, self.size = cv2, None, None, None
+        self.cv2, self.faces, self.objects, self.size, self.recognition = cv2, None, None, None, None
         if faces:
             self.faces = cv2.FaceDetectorYN.create(str(faces), "", (DETECT_W, DETECT_W), 0.7, 0.3, 50)
+            if recognition:
+                self.recognition = cv2.FaceRecognizerSF.create(str(recognition), "")
         if objects:
             import onnxruntime
             opt = onnxruntime.SessionOptions()
@@ -138,18 +146,32 @@ class Detector:
     def __bool__(self):
         return bool(self.faces or self.objects)
 
-    def detect(self, bgr):
-        """{"faces": [height share …], "objects": [(label, height share) …]} for a BGR frame."""
+    def detect(self, bgr, full=None):
+        """{"faces": [height share …], "objects": [(label, height share) …], "found": [{"v", "size", "score",
+        "crop"}]} for a BGR frame; found: the faces large enough to tell people apart, cut from the frame `full`
+        in its original size."""
         import numpy as np
         cv2 = self.cv2
         h, w = bgr.shape[:2]
-        out = {"faces": [], "objects": []}
+        out = {"faces": [], "objects": [], "found": []}
         if self.faces:
             if self.size != (w, h):
                 self.faces.setInputSize((w, h))
                 self.size = (w, h)
             found = self.faces.detect(bgr)[1]
-            out["faces"] = sorted((round(float(f[3]) / h, 3) for f in (found if found is not None else [])), reverse=True)
+            found = found if found is not None else []
+            out["faces"] = sorted((round(float(f[3]) / h, 3) for f in found), reverse=True)
+            if self.recognition and full is not None:
+                up = full.shape[0] / h
+                for f in found:
+                    if f[3] * up < FACE_PX or f[14] < FACE_SCORE:
+                        continue
+                    row = f.copy()
+                    row[:14] *= up
+                    crop = self.recognition.alignCrop(full, row)
+                    v = self.recognition.feature(crop).ravel().astype(np.float32)
+                    out["found"].append({"v": v / (float(np.linalg.norm(v)) + 1e-9), "size": round(float(f[3]) / h, 3),
+                                         "score": float(f[14]), "crop": crop.copy()})
         if self.objects:
             side = self.side
             r = min(side / h, side / w)
@@ -216,7 +238,8 @@ def detect_scenes(path, threshold):
 
 def video_metrics(path, duration, keep_clip_frames, detector=None):
     """Measures per second, the samples behind them (five a second), what the detector saw in the middle of every
-    second, a signature of the clip, and one frame per second for CLIP (RGB, middle of the second)."""
+    second, a signature of the clip, one frame per second for CLIP (RGB, middle of the second), and the faces that
+    can be told apart."""
     import cv2
     import numpy as np
     cap = cv2.VideoCapture(str(path))
@@ -226,7 +249,7 @@ def video_metrics(path, duration, keep_clip_frames, detector=None):
     step = max(1, round(fps / SAMPLE_FPS))
     n_sec = max(1, math.ceil(duration))
     secs = [dict(sharp=[], luma=[], low=[], high=[], gm=[], resid=[], zoom=[], warm=[], sat=[]) for _ in range(n_sec)]
-    frames_for_clip, samples, seen, signature = {}, [], {}, []
+    frames_for_clip, samples, seen, signature, found = {}, [], {}, [], []
     prev_small, idx, grid = None, 0, None
     while True:
         ok = cap.grab()
@@ -248,7 +271,8 @@ def video_metrics(path, duration, keep_clip_frames, detector=None):
                 view = cv2.resize(frame, (DETECT_W, round(DETECT_W * h / w)), interpolation=cv2.INTER_AREA)
                 view_gray = cv2.cvtColor(view, cv2.COLOR_BGR2GRAY)
                 if detector:
-                    seen[sec] = detector.detect(view)
+                    seen[sec] = detector.detect(view, frame)
+                    found += [dict(f, t=sec) for f in seen[sec].pop("found")]
                 seen[sec]["horizon"] = horizon(view_gray)
                 signature.append(np.concatenate((cv2.resize(view_gray, (12, 8), interpolation=cv2.INTER_AREA).ravel(),
                                                  cv2.resize(view, (4, 3), interpolation=cv2.INTER_AREA).ravel())))
@@ -332,7 +356,7 @@ def video_metrics(path, duration, keep_clip_frames, detector=None):
         out.append(p)
     if len(signature) > SIGNATURE:
         signature = [signature[round(k * (len(signature) - 1) / (SIGNATURE - 1))] for k in range(SIGNATURE)]
-    return out, frames_for_clip, fps, samples, [v.tolist() for v in signature]
+    return out, frames_for_clip, fps, samples, [v.tolist() for v in signature], found
 
 
 class ClipTagger:
@@ -551,12 +575,16 @@ def _spans(rs, label=None, limit=8):
     return ", ".join(parts) + (f" (+{len(rs) - limit} more)" if len(rs) > limit else "")
 
 
-def readable(clips, out):
+def readable(clips, out, known=None):
     """A few lines per clip for reading: what is usable, how the camera moves, who and what is in the picture, the
-    sound, the place and other takes."""
+    sound, the place and other takes. known: the people of people.json."""
     index = read_json(out / "_index.json") if (out / "_index.json").exists() else {}
     lines = ["Footage quality per clip (cutter analyze). Times are minutes:seconds of the clip; details and units: "
              "docs/formats.md, the numbers per second: " + f"{out.name}/<ID>.json", ""]
+    if known:
+        lines += ["People by their faces (pictures: people.jpg; cutter people name/merge to correct): "
+                  + ", ".join(f'{p["id"]}{" " + p["name"] if p["name"] else ""} ({p["seconds"]} s in {len(p["clips"])} clips)'
+                              for p in known), ""]
     for c in clips:
         f = out / f'{c["id"]}.json'
         if not f.exists():
@@ -598,6 +626,10 @@ def readable(clips, out):
             pic.append(f'horizon tilted {s["horizon_tilt"]:+g}°')
         if pic:
             lines.append("picture  " + " | ".join(pic))
+        who = [f'{p["id"]}{" " + p["name"] if p["name"] else ""} {_spans(p["clips"][c["id"]], limit=4)}'
+               for p in known or [] if p["clips"].get(c["id"])]
+        if who:
+            lines.append("who      " + ", ".join(who))
         au = d.get("audio") or {}
         if au:
             snd = [f'{au["lufs"]:g} LUFS'] if au.get("lufs") is not None else []
@@ -624,13 +656,18 @@ def readable(clips, out):
 
 
 def run(clips_path, out, only=None, force=False, device="auto", scenes=True, clip_tags=None, audio_tags=None,
-        scene_threshold=27.0, content_tags=None, detect=True, sound=True, text_path=None):
+        scene_threshold=27.0, content_tags=None, detect=True, sound=True, text_path=None, people_path=None,
+        recognize=True):
     """Analyze every clip. clip_tags/audio_tags: None = use them if torch & co. are installed."""
     try:
-        import cv2  # noqa: F401
+        import cv2
     except ImportError:
         raise CutterError("OpenCV is missing (it is in the Docker image)", MISSING)
-    from . import audio_analysis, telemetry
+    try:                                              # the models make OpenCV 5 warn about targets it ignores anyway
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+    except AttributeError:
+        pass
+    from . import audio_analysis, people, telemetry
     all_clips = read_json(clips_path)
     clips = all_clips
     if only:
@@ -672,9 +709,10 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
         import cv2
         cv2.setNumThreads(2)
         os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "threads;2")
-    models = (None, None)
+    models = (None, None, None)
     if pending and detect:
-        models = (model_file("faces"), model_file("objects") if available("onnxruntime") else None)
+        models = (model_file("faces"), model_file("objects") if available("onnxruntime") else None,
+                  model_file("recognition") if recognize and people_path else None)
     if pending:
         log(f"\nImage and sound analysis of {len(pending)} clips "
             f"({sum(c['duration'] for c in pending) / 60:.0f} min of footage) …")
@@ -697,9 +735,18 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
                "resolution": f'{c.get("width")}x{c.get("height")}', "units": UNITS}
         try:
             res["scenes"] = detect_scenes(path, scene_threshold) if scenes else []
-            per_sec, frames, _, samples, signature = video_metrics(path, c["duration"], clip_tagger is not None, detector())
+            per_sec, frames, _, samples, signature, found = video_metrics(path, c["duration"], clip_tagger is not None, detector())
         except Exception as e:
             return c, None, str(e), 0
+        if models[0] and models[2]:
+            import cv2
+            res["faces"] = people.clip_faces(found)
+            (out / "faces").mkdir(exist_ok=True)
+            for old in (out / "faces").glob(f'{c["id"]}_*.jpg'):
+                old.unlink()
+            for k, g in enumerate(res["faces"]):
+                g["thumb"] = f'faces/{c["id"]}_{k}.jpg'
+                cv2.imwrite(str(out / g["thumb"]), found[g.pop("best")]["crop"])
         values, res["camera"] = quality.camera(samples, c["duration"])
         res["usable"], res["flaws"] = quality.usable(samples, values, c["duration"])
         if clip_tagger and frames:
@@ -744,8 +791,10 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
             log(f'  [{n}/{len(pending)}] {c["id"]} {c["duration"]:.0f} s in {took:.0f} s, usable {res["summary"]["usable_s"]:g} s')
     flag_low_detail(all_clips, out)
     takes = find_takes(all_clips, out)
+    known = people.update(all_clips, out, people_path)["people"] if people_path else []
     if text_path:
-        pathlib.Path(text_path).write_text(readable(all_clips, out), encoding="utf-8")
+        pathlib.Path(text_path).write_text(readable(all_clips, out, known), encoding="utf-8")
     return {"output": str(out), "analyzed": done, "clip_tags": bool(clip_tagger), "audio_tags": bool(audio_tagger),
-            "faces": bool(models[0]), "objects": bool(models[1]), "workers": workers if pending else 0,
+            "faces": bool(models[0]), "objects": bool(models[1]),
+            "people": [{k: p[k] for k in ("id", "name", "seconds")} for p in known], "workers": workers if pending else 0,
             "takes": takes, "text": str(text_path) if text_path else None}

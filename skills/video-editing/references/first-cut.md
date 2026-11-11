@@ -22,6 +22,8 @@ Then create the project: `cutter new <folder> --media <footage>` (`--language de
 transcripts with a time for every word (`analysis/transcripts/C001.json`), `analysis/transcript_all.txt`, contact
 sheets (`analysis/sheets/`), film strips (`analysis/strips/`) and `analysis/quality.txt`: per clip the usable
 ranges, the flaws, the camera moves, people and objects, the sound, the place and other takes of the same shot.
+It also finds the same person again across clips by the face (`analysis/people.json`, pictures in
+`analysis/people.jpg`).
 Hours of footage take hours on a CPU: start it in the background and say so.
 
 Then look for yourself:
@@ -32,6 +34,12 @@ Then look for yourself:
   sound will not carry a scene. The bar under each contact sheet shows the same at a glance (green usable, red
   flawed, blue speech, orange wind). These are measurements, not judgments: a shaky shot can be the right one, and
   a "usable" one can be dull. The numbers per second are in `analysis/image/<id>.json` (`docs/formats.md`).
+- Look at `analysis/people.jpg`: one row of faces per person (`P1`, `P2` …). Show it to the user and ask who is
+  who; store the answers with `cutter people name P1 "Ada"`. Rows that show the same person: `cutter people merge
+  P1 P4`. The `who` line of `quality.txt` then says who is in which clip and when – use it to find the shots of
+  the main characters and to keep people on the no-go list out. It only knows faces that are large and turned
+  towards the camera: a clip without a `who` line may still show the person, so check no-gos by eye as well. A row
+  with mixed faces is a grouping error; do not rely on that ID.
 - Look at the contact sheets of every clip; `cutter tool window <out.jpg> C017:30:8` shows a time window frame by
   frame, `cutter tool frames <out.jpg> "C017:31,35;C023:4"` single frames.
 - Whisper mishears names and quiet speech: check doubtful sentences with `cutter tool asr C017:30:38:full`.
