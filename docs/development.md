@@ -31,7 +31,8 @@ not a dry run; subprocesses get an empty HOME and no ssh agent (`test_feedback_d
 | `test_review_server.py` | Basic Auth (401/200/503), range requests (206/416), the comment API, `review password`, `serve` refusing to start without a password |
 | `test_feedback_deploy.py` | `feedback fetch`/`reply` on a local database, `deploy --dry-run`, server templates |
 | `test_launcher_agent.py` | the launcher under dash with a Docker stub (mounts, paths, ports, macOS branches), `agent setup` with a temporary HOME, the skill and plugin manifests |
-| `test_footage_quality.py` | camera moves, usable ranges and flaws from samples; wind against an engine; GoPro GPMF and DJI flight logs built at run time; the quality bar; the whole analysis on a generated clip with a known pan and blur (needs OpenCV, so it runs in the image) |
+| `test_footage_quality.py` | camera moves, usable ranges and flaws from samples; wind against an engine; GoPro GPMF and DJI flight logs built at run time; the quality bar; grouping faces into people, keeping IDs, names and merges, `cutter people`; the whole analysis on a generated clip with a known pan and blur (needs OpenCV, so it runs in the image) |
+| `test_release.py` | the version is the same everywhere; nothing that goes into the image changed under a version that is already tagged |
 | `test_cli.py` | help for every command, JSON results and errors, `new`, `plan`, `doctor`, dry runs |
 | `test_docs.py` | the legacy table in formats.md, relative links |
 | `test_filmcraft_headless.py` | builds the demo's FilmCraft project with the real CLI and renders frames (needs `filmcraft-cli`) |
@@ -46,7 +47,7 @@ generated, so no media is checked in.
 **Inside the image:**
 
 ```sh
-docker run --rm --entrypoint python ghcr.io/aaronblankenburg/cutter:0.1.0 -m unittest discover -s /opt/cutter/tests
+docker run --rm --entrypoint python ghcr.io/aaronblankenburg/cutter:0.2.0 -m unittest discover -s /opt/cutter/tests
 ```
 
 ### Local reference tests
@@ -113,5 +114,13 @@ otherwise `docker pull` needs a login. The arm64 image is built only there; it h
 ## Releases
 
 The version is in `src/cutter/__init__.py` (`VERSION`), `pyproject.toml`, `.claude-plugin/*.json` and the image tag
-in `compose.yaml`. The launcher pulls `ghcr.io/<owner>/cutter:<VERSION>`, so a release is: bump the version
-everywhere, commit, tag `vX.Y.Z`, push the tag; the workflow publishes the image.
+in `compose.yaml` and in the docs. The launcher pulls `ghcr.io/<owner>/cutter:<VERSION>`, so a release is: bump the
+version everywhere, commit, tag `vX.Y.Z` (annotated), push the tag; the workflow publishes the image and refuses a
+tag that is not the version in the code.
+
+The plugin and `cutter update` follow the main branch, while the image is found by its version. Code that changes
+without a new version would therefore run its new skill and documentation against the old image, without any
+error. `tests/test_release.py` (also `.github/workflows/check.yml`, on every push to main and every pull request)
+fails when `src/`, `requirements.txt`, `Dockerfile`, `docker/` or `pyproject.toml` differ from the tag of the
+current version. So the first change to the code after a release bumps the version in the same commit. Until that
+version is tagged its image does not exist on GHCR, and the launcher builds it from the checkout instead.

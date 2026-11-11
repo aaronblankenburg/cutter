@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cutter"
-version = "0.1.0"
+version = "0.2.0"
 license = "MIT"
 description = "Cut films with an AI agent: footage analysis, beat-synced editing, timelines, FilmCraft finishing and a review app"
 readme = "README.md"

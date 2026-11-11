@@ -1,0 +1,22 @@
+# Fails when the code of the image changed under a version that is already tagged, or when the version differs
+# between the files that carry it (tests/test_release.py). The launcher pulls the image by version and the plugin
+# follows the main branch, so such a change would run new documentation against old code.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0          # the tags are needed
+      - run: python3 -m unittest discover -s tests -p test_release.py -v
