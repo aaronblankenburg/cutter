@@ -12,6 +12,10 @@ project_license = {{LICENSE}}
 # names, so if the footage moves or you switch computers, change the path here and rebuild the timeline.
 {{MEDIA}}
 
+[proxies]
+# true: cutter analyze also makes small copies of 4K/HEVC footage (analysis/proxies/) for fast drafts
+make = false
+
 [music]
 # CC0 and CC BY by default. Add "CC BY-NC" or "CC BY-NC-SA" only if the film is non-commercial.
 # Never allowed: ND (no derivatives) and BY-SA (share-alike forces its license onto the film).

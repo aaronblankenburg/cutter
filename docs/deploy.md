@@ -56,7 +56,7 @@ The image runs on arm64 as well, so a server with Docker can run the review app 
 
 ```sh
 docker run -d --name cutter-review --restart unless-stopped -p 127.0.0.1:8089:8089 \
-  -v /srv/film:/srv/film -w /srv/film ghcr.io/aaronblankenburg/cutter:0.2.0 serve --bind 0.0.0.0 --port 8089
+  -v /srv/film:/srv/film -w /srv/film ghcr.io/aaronblankenburg/cutter:0.2.1 serve --bind 0.0.0.0 --port 8089
 ```
 
 with nginx in front as above. This variant is documented only and has not been tested on a server.

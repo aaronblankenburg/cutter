@@ -48,6 +48,8 @@ the story, music (license first, then beats), the edit list, render, review. The
 cutter new <folder> --media <footage>       # then cd <folder>
 cutter doctor
 cutter analyze                              # transcripts, contact sheets, quality.txt -> analysis/
+                                            # 4K or HEVC footage: add --proxies, then cutter timeline <cut> --proxies
+                                            # for fast drafts; the accepted film is built without it (first-cut.md)
 cutter music license && cutter music analyze
 # write cuts/cut1/edit.json and cuts/cut1/decisions.json
 cutter retime cut1 && cutter timeline cut1

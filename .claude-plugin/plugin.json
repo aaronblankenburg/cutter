@@ -1,6 +1,6 @@
 {
   "name": "cutter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Cut films with an AI agent: footage analysis, beat-synced editing, timelines, FilmCraft finishing and a review app where people comment on each cut.",
   "author": {
     "name": "cutter project",

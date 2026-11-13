@@ -64,6 +64,10 @@ beats_from = "M1"               # use another cue's beats (a second excerpt of t
 [image_analysis]
 recognize_faces = false         # do not work out who is who (default: true; see people.json)
 
+[proxies]
+make = true                     # every cutter analyze makes the missing proxies, as --proxies does (default: false)
+height = 720                    # of the proxies (default: 720)
+
 [filmcraft]
 config = "filmcraft.json"       # titles, credits, map, captions … (see below)
 export_preset = "Match Source – Adaptive Low Bitrate"
@@ -150,6 +154,27 @@ the clip, people and objects, sound, place, other takes). The numbers behind it 
 `analysis/image/_index.json` holds every clip's `summary`. Files of an older `version` (before these fields) are
 measured again by the next `cutter analyze`.
 
+### Proxies
+
+`cutter analyze --proxies` writes `analysis/proxies/C001.mp4` for every clip that is larger than 720 lines or not
+H.264: the same frames at the same times in H.264 at 720 lines (a key frame every half second, no B-frames), the
+first sound track as AAC, upright where the footage is stored rotated, without the footage's metadata. Clips that
+are small H.264 already get none and are used as they are. `analysis/proxies/proxies.json` says which is which:
+
+```json
+{"version": 1, "height": 720,
+ "clips": {"C001": {"file": "C001.mp4", "width": 1280, "height": 720, "duration": 34.2, "for_height": 720,
+                    "source": {"size": 412345678, "mtime": 1714546800}},
+           "C002": {"file": null, "for_height": 720, "source": {…}}}}
+```
+
+A proxy stands in for its clip as long as the footage file has the size and date in `source`; a proxy that did not
+come out as long as its clip is thrown away. Where a proxy exists, the image analysis reads the picture from it
+(`"picture_from": "proxy 1280x720"` in `analysis/image/C001.json`; sound and track still come from the footage),
+and `cutter timeline <cut> --proxies` builds a draft that plays the proxies. The measurements agree with those
+from the footage to within a few tenths of a second; faces count for who is who when they are 48 pixels high in
+the picture that is read, so in a proxy of 4K footage small faces are found but not told apart.
+
 ### people.json
 
 `analysis/people.json` lists the people found by their faces, most seen first; `analysis/people.jpg` shows a row
@@ -166,13 +191,18 @@ of faces for each, and `quality.txt` says who is in a clip and when (`who`).
   their members are similar on average. A face seen for less than three
   seconds in the whole project gets no ID (`unassigned_faces`).
 - `cutter people name P1 "Ada"` names a person; `cutter people merge P1 P4` says two IDs are one person (the first
-  stays). IDs, names and merges survive a new analysis, because a person is found again through `vectors`. The
+  stays). IDs, names, merges and splits survive a new analysis, because a person is found again through `vectors`:
+  one for every group of faces filed under it, and such a group stays with that person from then on. The
   grouping errs on the careful side: next to the people it is sure of, expect a few IDs with one or two dark,
   blurred or turned-away faces of people who already have an ID, and the same person with and without sunglasses
   or a helmet may get two IDs (merge them). Faces in footage that was recorded upside down are found but not
-  recognised. Two
-  people who look alike, or small and blurred faces, may share one (that cannot be corrected yet). Check
-  `people.jpg` before relying on it.
+  recognised. Check `people.jpg` before relying on it.
+- Two people who look alike, or small and blurred faces, may share an ID. `cutter people split P3 C004 C007_1`
+  takes the faces of P3 in clip C004 and the picture C007_1 (the names under the pictures of `people.jpg`; all of
+  a person's are in `cutter people list --json`) out of P3 and gives them a new ID; `--to P1` files them under P1
+  instead. Like a merge this survives a new analysis: a group of faces whose vector a person holds stays with that
+  person. What cannot be taken apart is a single picture: the faces of one clip that the analysis put into one
+  group move together.
 - The vectors are biometric data. The file stays in the project folder; it is not part of the review data and is
   never deployed. `recognize_faces = false` in `[image_analysis]` leaves the step out.
 

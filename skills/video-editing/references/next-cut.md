@@ -37,12 +37,15 @@ these notes in violet at their places.
 ## 5. Render and publish
 
 ```sh
-cutter retime cut3 && cutter timeline cut3
+cutter retime cut3 && cutter timeline cut3     # with proxies: cutter timeline cut3 --proxies (a draft)
 cutter filmcraft build cut3      # starts from cut2's FilmCraft project; cut2.fcproj stays as it is
 cutter filmcraft export cut3
 cutter review-data cut3
 cutter deploy cut3               # only with a review server (deploy.env), and only after asking
 ```
+
+When the user accepts a cut that was a draft from proxies, build that cut from the footage before handing it over:
+`cutter timeline cut3 && cutter filmcraft build cut3 --overwrite && cutter filmcraft export cut3`.
 
 With a local review app, `cutter serve` serves the new cut right away; the reviewers' apps open it by themselves.
 

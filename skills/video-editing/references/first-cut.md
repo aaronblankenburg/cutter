@@ -39,7 +39,9 @@ Then look for yourself:
   P1 P4`. The `who` line of `quality.txt` then says who is in which clip and when – use it to find the shots of
   the main characters and to keep people on the no-go list out. It only knows faces that are large and turned
   towards the camera: a clip without a `who` line may still show the person, so check no-gos by eye as well. A row
-  with mixed faces is a grouping error; do not rely on that ID.
+  with mixed faces is a grouping error: under each picture is its name (clip and number), and `cutter people split
+  P3 C004_1 C007 --to P1` files those pictures (or all faces of P3 in a clip) under P1; without `--to` they get a
+  new ID. The sheet shows at most eight pictures per person; `cutter people list --json` has them all.
 - Look at the contact sheets of every clip; `cutter tool window <out.jpg> C017:30:8` shows a time window frame by
   frame, `cutter tool frames <out.jpg> "C017:31,35;C023:4"` single frames.
 - Whisper mishears names and quiet speech: check doubtful sentences with `cutter tool asr C017:30:38:full`.
@@ -73,6 +75,12 @@ cutter filmcraft build cut1 # titles, credits, audio chain, music ducking, subti
 cutter filmcraft export cut1
 cutter review-data cut1
 ```
+
+With proxies (`cutter analyze --proxies`, worth it for 4K or HEVC footage) build the cuts for review as drafts:
+`cutter timeline cut1 --proxies`, the rest as above. They cut at the same frames and render much faster, at the
+picture quality of the proxies. Only the film the user accepts is built from the footage:
+`cutter timeline <cut> && cutter filmcraft build <cut> --overwrite && cutter filmcraft export <cut>` – never hand
+over a draft as the finished film (`filmcraft export` says when it is one).
 
 Look at the export yourself before anyone else does: frames at every section change, the subtitles, the end.
 

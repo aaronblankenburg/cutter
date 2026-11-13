@@ -45,6 +45,7 @@ cutter new <folder> --media <footage> [--media <more footage>] [--title "…"] [
 | `analysis/quality.txt` | per clip: usable ranges, flaws, camera moves, people and objects, sound, place, other takes |
 | `analysis/people.json`, `people.jpg` | the people found by their faces, with the clips and times they are in ([formats.md](formats.md#peoplejson)) |
 | `analysis/image/<id>.json` | the measurements behind it, per second ([formats.md](formats.md#image-and-sound-analysis)) |
+| `analysis/proxies/` | with `--proxies`: small copies of large footage for fast drafts ([below](#proxies-for-drafts)) |
 
 Clips are numbered in recording order. Re-running only adds what is new (`--force` redoes everything).
 
@@ -54,7 +55,8 @@ enough, properly exposed), how the camera moves (static, pan, tilt, push in …)
 sound the loudness, speech, wind and clipping; from the file the place and, for GoPro and DJI, the track. Clips
 that look like another take of the same shot are named. Faces that are large enough are compared with each other,
 so that the same person is found again in other clips (`P1`, `P2` …; `cutter people name P1 "Ada"` gives a name,
-`cutter people merge P1 P4` joins two IDs of one person, `cutter people list` shows them). This runs on your
+`cutter people merge P1 P4` joins two IDs of one person, `cutter people split P3 C004` takes the faces of a clip
+out of an ID that shows two people, `cutter people list` shows them). This runs on your
 computer only. Every contact sheet gets a timeline of this below its
 pictures: green is usable, red flawed, blue speech, orange wind. `retime` uses the measurements to avoid flawed
 frames at cut points. Several clips are measured at a time; 27 minutes of 720p footage took 8 minutes on a 16-core computer. `--no-image` skips it.
@@ -86,6 +88,25 @@ shots and shots marked `free_timing` keep their cuts. Rules in cutter.toml say w
 cue enters (`[retime.cues.M2] entry = "first_downbeat"`). The edit list is rewritten in place; the input is kept as
 `cuts/cut1/work/edit.before-retime.json`, the decisions as `work/retime_log.json`.
 
+### Proxies for drafts
+
+4K and HEVC footage is slow to decode, and every draft decodes it again. `cutter analyze --proxies` (or
+`[proxies] make = true` in cutter.toml) makes a 720p H.264 copy of every clip that is larger than that or in
+another codec, frame for frame, in `analysis/proxies/`; small H.264 clips are used as they are. The footage is only
+read. Then:
+
+- the image analysis reads the picture from the proxies, which is several times faster,
+- `cutter timeline cut1 --proxies` builds a **draft**: the same cuts at the same frames, playing the proxies. The
+  rough render of `cutter review-data` and `cutter filmcraft build` / `export` follow the timeline and say that
+  they are a draft,
+- for the **final film** build the timeline from the footage and export again:
+  `cutter timeline cut1 && cutter filmcraft build cut1 --overwrite && cutter filmcraft export cut1`.
+
+Measured on 77 s of 4K HEVC footage (16 cores): making the proxies 35 s; image analysis 19 s instead of 85 s;
+rough render of a 29 s cut 8 s instead of 22 s; FilmCraft export 39 s instead of 59 s. Draft and final export
+show the same frame at every moment. The proxies take about a twentieth of the space of such footage. With 720p
+or 1080p H.264 footage there is little to gain.
+
 ## 6. Timeline
 
 `cutter timeline cut1` sets the camera audio levels (picture shots under music are lowered by
@@ -96,7 +117,8 @@ cue enters (`[retime.cues.M2] entry = "first_downbeat"`). The edit list is rewri
 - `cuts/cut1/cut1.srt` – the subtitles
 
 Tracks: V1 picture, V2 map, V3 route, V4 cutaways, V5 overview, A1 dialogue, A2 music (names configurable).
-Media paths come from the footage roots in cutter.toml (see "Moving footage" below).
+Media paths come from the footage roots in cutter.toml (see "Moving footage" below); with `--proxies` the clips
+that have a proxy play it (a draft, see [above](#proxies-for-drafts)).
 
 ## 7. FilmCraft
 

@@ -5,7 +5,7 @@ relative to the project folder; media paths in edit lists are relative to the fi
 Project layout (see README):
 
     cutter.toml, AGENTS.md, CLAUDE.md
-    analysis/            clips.json, transcripts/, sheets/, strips/, image/
+    analysis/            clips.json, transcripts/, sheets/, strips/, image/, proxies/
     music/               music files and music.json (beats, bars, loudness)
     cuts/cut<n>/         edit.json, decisions.json, plan.py, cut<n>.otio/.fcp7.xml/.srt, cut<n>.fcproj, work/
     exports/             rendered films (cut<n>.mp4)
@@ -34,6 +34,7 @@ DEFAULTS = {
         "clips": "analysis/clips.json",
         "transcripts": "analysis/transcripts",
         "image_analysis": "analysis/image",
+        "proxies": "analysis/proxies",
         "music": "music",
         "music_analysis": "music/music.json",
         "cut": "cuts/{cut}",
@@ -90,6 +91,10 @@ DEFAULTS = {
         "agent": "Claude",
         "url": "",
         "ui_language": "",
+    },
+    "proxies": {
+        "make": False,          # true: every cutter analyze makes the missing proxies (as --proxies does)
+        "height": 720,
     },
     "filmcraft": {
         "config": "",

@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Cut films with an AI agent: footage analysis, beat-synced editing, timelines, FilmCraft finishing and a review app.",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "plugins": [
     {
       "name": "cutter",
       "source": "./",
       "description": "The video-editing skill: cut a film from a folder of footage and turn reviewers' feedback into the next cut.",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "cutter project",
         "url": "https://github.com/aaronblankenburg/cutter"

@@ -137,14 +137,31 @@ def resolve_clips(clips, media_roots=None):
     return clips
 
 
+def use_proxies(clips, proxies):
+    """The clips with their proxies in place of the footage: path and picture size are the proxy's (it is stored
+    upright), everything else – times, frame rate, the name on the timeline – stays the clip's."""
+    for cid, x in (proxies or {}).items():
+        if cid in clips:
+            c = clips[cid]
+            clips[cid] = dict(c, path=x["path"], width=x["width"], height=x["height"], rotation=0,
+                              source_name=c.get("source_name") or pathlib.Path(c["path"]).name)
+    return clips
+
+
+def _file_name(c):
+    return c.get("source_name") or pathlib.Path(c["path"]).name
+
+
 def load_edit(path):
     """Read an edit list (English or legacy). Returns (edit, was_legacy)."""
     return edit_from_legacy(read_json(path))
 
 
 def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), config_external=None,
-          track_names=None, texts=None, metadata_keys="auto", media_roots=None, xml_suffix=".fcp7.xml", project_dir=None):
-    """Build the timeline. Returns a report (dict); writes <out>.otio, <out>_fcp7.xml and, if needed, <out>.srt."""
+          track_names=None, texts=None, metadata_keys="auto", media_roots=None, xml_suffix=".fcp7.xml", project_dir=None,
+          proxies=None):
+    """Build the timeline. Returns a report (dict); writes <out>.otio, <out>_fcp7.xml and, if needed, <out>.srt.
+    proxies: {clip ID: {"path", "width", "height"}} (proxies.table) makes it a draft that plays the proxies."""
     try:
         import opentimelineio as otio
     except ImportError:
@@ -158,6 +175,8 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
         legacy = metadata_keys == "legacy"
     meta_out = lambda m: otio_meta_out(m, legacy)
     clips = resolve_clips({c["id"]: c for c in read_json(clips_path)}, media_roots)
+    if proxies is not None:
+        clips = use_proxies(clips, proxies)
     base, fps = pathlib.Path(base), float(edit.get("fps", 25))
     folders = [base / o for o in music_dirs] or [base]      # absolute music_dirs stay absolute
     for cid, x in external_clips(edit, config_external).items():
@@ -199,7 +218,7 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
             r = rate_of(c)
             if s["out"] > c["duration"] + 0.05:
                 raise CutterError(f'Shot {s["nr"]}: out {s["out"]} is past the end of {s["clip"]} ({c["duration"]:.2f} s)')
-            name = f'{s["nr"]:02d} {s["clip"]} {pathlib.Path(c["path"]).name}'
+            name = f'{s["nr"]:02d} {s["clip"]} {_file_name(c)}'
             w, h = c.get("width") or FRAME_W, c.get("height") or FRAME_H
             scale = fill_scale(w, h, c.get("rotation") or 0)
             for tr in (V1, A1):
@@ -338,7 +357,7 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
                 scale = fill_scale(w, h, c.get("rotation") or 0)
                 ref = ext_ref(c["path"], c["duration"], r)
                 ref.metadata["fcp_xml"] = fcp_file_meta(w, h)
-                cl = otio.schema.Clip(name=f'{s["nr"]:02d}e {e["clip"]} {pathlib.Path(c["path"]).name}', media_reference=ref,
+                cl = otio.schema.Clip(name=f'{s["nr"]:02d}e {e["clip"]} {_file_name(c)}', media_reference=ref,
                                       source_range=TR(rt(e["in"], r), rt(dur, r)),
                                       metadata={ns: meta_out({"cutaway_of": s["nr"], "note": e.get("note", ""),
                                                               "scale_percent": round(scale, 4)}),
@@ -361,6 +380,10 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
         t0 = anchor(mk)
         tl.tracks.markers.append(otio.schema.Marker(name=mk["name"], marked_range=TR(rt(t0), rt(mk.get("duration", 0.0))),
                                                     color=getattr(otio.schema.MarkerColor, mk.get("color", "YELLOW"))))
+    played = {x["clip"] for sec in edit["sections"] for s in sec["shots"] for x in [s, *s.get("cutaways", [])]}
+    used = sorted(cid for cid in played if cid in (proxies or {}))
+    if proxies is not None:
+        tl.metadata[ns] = {"media": "proxies"}             # a draft; review-data and filmcraft export say so
     out = str(out)
     pathlib.Path(out).parent.mkdir(parents=True, exist_ok=True)
     otio.adapters.write_to_file(tl, f"{out}.otio")
@@ -382,7 +405,9 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
     if subs:
         lines.append(f"Subtitles: {len(subs)} to {out}.srt")
     lines += ["Music:", *report]
-    return {"otio": f"{out}.otio", "xml": f"{out}{xml_suffix}", "srt": srt, "duration": round(total, 3), "clips": n,
+    if proxies is not None:
+        lines.append(f"Draft: {len(used)} clips play their proxies – for the final film build the timeline without --proxies")
+    return {"media": "proxies" if proxies is not None else "footage", "proxies": used, "otio": f"{out}.otio", "xml": f"{out}{xml_suffix}", "srt": srt, "duration": round(total, 3), "clips": n,
             "scaled": len(scaled), "cutaways": n_cut, "subtitles": len(subs), "music": music_report,
             "legacy_metadata": legacy, "text": "\n".join(lines)}
 

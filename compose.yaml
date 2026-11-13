@@ -7,7 +7,7 @@
 name: cutter
 
 x-base: &base
-  image: ${CUTTER_IMAGE:-ghcr.io/aaronblankenburg/cutter:0.2.0}
+  image: ${CUTTER_IMAGE:-ghcr.io/aaronblankenburg/cutter:0.2.1}
   build: .
   user: "${UID:-1000}:${GID:-1000}"
   working_dir: ${PROJECT:?set PROJECT to the project folder}

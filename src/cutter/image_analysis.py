@@ -582,7 +582,7 @@ def readable(clips, out, known=None):
     lines = ["Footage quality per clip (cutter analyze). Times are minutes:seconds of the clip; details and units: "
              "docs/formats.md, the numbers per second: " + f"{out.name}/<ID>.json", ""]
     if known:
-        lines += ["People by their faces (pictures: people.jpg; cutter people name/merge to correct): "
+        lines += ["People by their faces (pictures: people.jpg; cutter people name/merge/split to correct): "
                   + ", ".join(f'{p["id"]}{" " + p["name"] if p["name"] else ""} ({p["seconds"]} s in {len(p["clips"])} clips)'
                               for p in known), ""]
     for c in clips:
@@ -657,8 +657,9 @@ def readable(clips, out, known=None):
 
 def run(clips_path, out, only=None, force=False, device="auto", scenes=True, clip_tags=None, audio_tags=None,
         scene_threshold=27.0, content_tags=None, detect=True, sound=True, text_path=None, people_path=None,
-        recognize=True):
-    """Analyze every clip. clip_tags/audio_tags: None = use them if torch & co. are installed."""
+        recognize=True, proxies=None):
+    """Analyze every clip. clip_tags/audio_tags: None = use them if torch & co. are installed. proxies: {clip ID:
+    {"path", "width", "height"}} (proxies.table): the picture of these clips is read from the proxy."""
     try:
         import cv2
     except ImportError:
@@ -733,9 +734,13 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
         path = pathlib.Path(c["path"])
         res = {"id": c["id"], "version": VERSION, "file": c.get("rel_path"), "duration": c["duration"], "fps": c.get("fps"),
                "resolution": f'{c.get("width")}x{c.get("height")}', "units": UNITS}
+        picture = path
+        if c["id"] in (proxies or {}):                 # the same frames, much faster to decode; sound and track
+            x = proxies[c["id"]]                       # are read from the footage
+            picture, res["picture_from"] = pathlib.Path(x["path"]), f'proxy {x["width"]}x{x["height"]}'
         try:
-            res["scenes"] = detect_scenes(path, scene_threshold) if scenes else []
-            per_sec, frames, _, samples, signature, found = video_metrics(path, c["duration"], clip_tagger is not None, detector())
+            res["scenes"] = detect_scenes(picture, scene_threshold) if scenes else []
+            per_sec, frames, _, samples, signature, found = video_metrics(picture, c["duration"], clip_tagger is not None, detector())
         except Exception as e:
             return c, None, str(e), 0
         if models[0] and models[2]:

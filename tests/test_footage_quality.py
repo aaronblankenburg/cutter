@@ -337,6 +337,50 @@ class People(unittest.TestCase):
             self.assertEqual([(p["id"], p["name"], sorted(p["clips"]), len(p["vectors"])) for p in one],
                              [("P1", "Ada", ["C001", "C002"], 2)])
 
+    def test_a_mixed_person_can_be_split(self):
+        import numpy as np
+        from cutter import people
+        from cutter.util import CutterError
+        with TempDir() as d:
+            clips = [{"id": f"C00{k}", "duration": 20.0} for k in (1, 2, 3, 4)]
+            for cid, seed, secs in (("C001", 1, range(0, 9)), ("C002", 1, range(0, 6)), ("C003", 2, range(0, 7)),
+                                    ("C004", 3, range(0, 5))):
+                for g in self.clip_file(d, cid, [(seed, secs)]):
+                    g["thumb"] = f"faces/{cid}_0.jpg"
+                    (d / "image" / f"{cid}.json").write_text(json.dumps({"id": cid, "faces": [g]}))
+            file = d / "people.json"
+            people.update(clips, d / "image", file)
+            people.merge(file, ["P1", "P2"])                              # the mistake: two people under one ID
+            mixed = people.update(clips, d / "image", file)["people"]
+            self.assertEqual([(p["id"], sorted(p["clips"])) for p in mixed],
+                             [("P1", ["C001", "C002", "C003"]), ("P3", ["C004"])])
+            for which, to in ((["C009"], None), (["C001", "C002", "C003"], None), (["C003"], "P1"), (["C003"], "P8")):
+                with self.assertRaises(CutterError):
+                    people.split(file, "P1", which, clips, d / "image", to=to)
+            old, new, moved = people.split(file, "p1", ["c003_0"], clips, d / "image", dry_run=True)
+            self.assertEqual((old["id"], new["id"], moved), ("P1", "P4", ["C003_0"]))
+            self.assertEqual(len(people.load(file)["people"]), 2)         # the dry run wrote nothing
+            people.split(file, "P1", ["C003"], clips, d / "image")
+            for _ in range(2):                                            # it stays that way in every later analysis
+                apart = people.update(clips, d / "image", file)["people"]
+                self.assertEqual([(p["id"], sorted(p["clips"]), p["seconds"]) for p in apart],
+                                 [("P1", ["C001", "C002"], 15), ("P3", ["C004"], 5), ("P4", ["C003"], 7)])
+            # a face much closer to the others of P1 than to its own vector still stays where the split put it
+            data = people.load(file)
+            near = people.unit(np.sum(data["people"][0]["vectors"], axis=0))
+            faces = json.loads((d / "image" / "C003.json").read_text())["faces"]
+            faces[0]["vector"] = [round(float(x), 4) for x in near]
+            (d / "image" / "C003.json").write_text(json.dumps({"id": "C003", "faces": faces}))
+            data["people"][2]["vectors"] = [faces[0]["vector"]]
+            data["people"][0]["vectors"] = data["people"][0]["vectors"][:2]
+            file.write_text(json.dumps(data))
+            self.assertEqual(sorted(people.update(clips, d / "image", file)["people"][2]["clips"]), ["C003"])
+            # --to: the faces are someone who has an ID already
+            people.split(file, "P1", ["C002"], clips, d / "image", to="P3")
+            moved = people.update(clips, d / "image", file)["people"]
+            self.assertEqual([(p["id"], sorted(p["clips"])) for p in moved],
+                             [("P1", ["C001"]), ("P3", ["C002", "C004"]), ("P4", ["C003"])])
+
     def test_people_command(self):
         from helpers import run_cutter
         with TempDir() as d:
@@ -356,6 +400,9 @@ class People(unittest.TestCase):
             self.assertEqual((r["id"], r["name"]), ("P1", "Ada"))
             rows = json.loads(run_cutter("people", "list", "--json", cwd=d).stdout)["people"]
             self.assertEqual([(p["id"], p["name"], p["seconds"], p["clips"]) for p in rows], [("P1", "Ada", 8, ["C001"])])
+            self.assertEqual(rows[0]["pictures"], [])
+            r = run_cutter("people", "split", "P1", "C001", "--json", cwd=d, check=False)
+            self.assertEqual((r.returncode, json.loads(r.stdout)["code"]), (2, 2))    # nothing would be left
             r = run_cutter("people", "name", "P7", "Bo", "--json", cwd=d, check=False)
             self.assertEqual((r.returncode, json.loads(r.stdout)["code"]), (2, 2))
 

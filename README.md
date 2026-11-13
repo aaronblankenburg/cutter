@@ -240,11 +240,11 @@ If the tags say nothing, the agent asks you instead of guessing.
 | `cutter new <folder> --media <path>` | Create a project folder with `cutter.toml`, `AGENTS.md` and `CLAUDE.md` |
 | `cutter doctor [--json]` | Check Docker, image, speech model, FilmCraft, footage access and disk space, and show how to fix what's missing |
 | `cutter analyze` | Clip list, transcripts with word timestamps, contact sheets, film strips; per clip the usable ranges, camera moves, people, sound and place |
-| `cutter people list` / `name` / `merge` | The people `analyze` found by their faces: who is in which clip; name them, join two IDs of one person |
+| `cutter people list` / `name` / `merge` / `split` | The people `analyze` found by their faces: who is in which clip; name them, join two IDs of one person, take apart an ID that shows two |
 | `cutter music analyze` / `license` | Beats, bars and loudness; license check |
 | `cutter plan <cut> [--new]` | Write the next cut's edit list from `plan.py` (the feedback as code) |
 | `cutter retime <cut>` | Snap cuts to the music |
-| `cutter timeline <cut>` | Build OTIO, FCP7 XML and SRT |
+| `cutter timeline <cut>` | Build OTIO, FCP7 XML and SRT; `--proxies` builds a fast draft from the proxies of `analyze --proxies` |
 | `cutter filmcraft build` / `export <cut>` | Build the FilmCraft project; export the MP4 with burned-in subtitles |
 | `cutter filmcraft gui` | Start the FilmCraft desktop app with its control channel (optional) |
 | `cutter map` | Overview and route maps for intros |

@@ -13,7 +13,7 @@ import time
 
 from . import VERSION
 from .config import Project, cut_name, previous_cut
-from .util import CutterError, FINDING, MISSING, Output, USAGE, dump_json, read_json
+from .util import CutterError, FINDING, MISSING, Output, USAGE, dump_json, read_json, write_json
 
 DESCRIPTION = """cutter – footage analysis, beat-synced editing, timelines, FilmCraft finishing, review app.
 
@@ -73,17 +73,28 @@ def c_analyze(a, out):
     if not media:
         raise CutterError("No footage given (cutter.toml → [media] or --media)", MISSING)
     target = pathlib.Path(a.output) if a.output else p.path("clips").parent
+    with_proxies = (a.proxies or p["proxies"].get("make")) and not a.list
     if a.dry_run:
-        return _dry(out, {"media": media, "output": str(target)},
-                    f"  footage: {', '.join(media)}\n  output:  {target} (clips.json, transcripts/, sheets/, strips/, quality.txt)")
+        return _dry(out, {"media": media, "output": str(target), "proxies": str(p.path("proxies")) if with_proxies else None},
+                    f"  footage: {', '.join(media)}\n  output:  {target} (clips.json, transcripts/, sheets/, strips/, quality.txt)"
+                    + (f"\n  proxies: {p.path('proxies')} ({p['proxies']['height']}p, for the clips that need one)" if with_proxies else ""))
     r = analyze.run_analysis(media, target, list_only=a.list, since=a.since, until=a.until, exclude=a.exclude, only=a.only,
                              force=a.force, no_transcripts=a.no_transcripts, no_sheets=a.no_sheets, model=a.model,
                              language=a.language or p.get("language") or "auto", device=a.device, threads=a.threads, max_frames=a.max_frames,
                              interval=a.interval, roots=p.media_roots())
+    made = table = None
+    if not a.list:
+        from . import proxies, timeline
+        clips = list(timeline.resolve_clips({c["id"]: c for c in read_json(target / "clips.json")}, p.media_roots()).values())
+        if with_proxies:                              # before the image analysis, which then reads them
+            made = proxies.make(clips, p.path("proxies"), height=p["proxies"]["height"], only=a.only, force=a.force)
+        if proxies.load(p.path("proxies")):
+            table = proxies.table(clips, p.path("proxies"))[0]
     if not a.no_image and not a.list:
         from . import image_analysis
         try:
             r["image"] = image_analysis.run(target / "clips.json", p.path("image_analysis"), only=a.only, force=a.force,
+                                            proxies=table,
                                             device=a.device, text_path=target / "quality.txt",
                                             people_path=target / "people.json",
                                             recognize=(p.get("image_analysis") or {}).get("recognize_faces", True),
@@ -97,6 +108,12 @@ def c_analyze(a, out):
             r["text"] = (r.get("text") or "") + f"\nUsable ranges, camera moves, people, sound and place per clip: {target / 'quality.txt'}"
             if r["image"]["people"]:
                 r["text"] += f"\nPeople by their faces ({len(r['image']['people'])}): {target / 'people.jpg'} – name them with cutter people name"
+    if made:
+        r["proxies"] = x = made
+        r["text"] = (r.get("text") or "") + (
+            f"\nProxies ({x['height']}p): {x['made']} made, {x['kept']} were there, {x['as_is']} clips need none"
+            f" -> {x['folder']} ({x['mb']:.0f} MB) – cutter timeline <cut> --proxies builds a draft from them"
+            + "".join(f"\n  ! {f['clip']}: no proxy ({f['problem']})" for f in x["failed"]))
     out.result(r, r.get("text"))
 
 
@@ -168,17 +185,35 @@ def c_timeline(a, out):
     target = p.path("timeline", cut)
     if not edit_p.exists():
         raise CutterError(f"Edit list not found: {edit_p}", MISSING)
+    table = None
+    if a.proxies:
+        from . import proxies
+        clips = timeline.resolve_clips({c["id"]: c for c in read_json(p.path("clips"))}, p.media_roots())
+        table, missing = proxies.table(list(clips.values()), p.path("proxies"))
+        if missing:
+            out.warn(f"No current proxy for {', '.join(missing[:8])}{' …' if len(missing) > 8 else ''}: the footage is used "
+                     f"(cutter analyze --proxies makes them)")
     if a.dry_run:
-        return _dry(out, {"edit": str(edit_p), "out": str(target)},
-                    f"  {edit_p}" + ("" if a.build_only else " (audio levels set in place)") + f"\n  -> {target}.otio, {target}.fcp7.xml, {target}.srt")
+        return _dry(out, {"edit": str(edit_p), "out": str(target), "media": "proxies" if a.proxies else "footage"},
+                    f"  {edit_p}" + ("" if a.build_only else " (audio levels set in place)") + f"\n  -> {target}.otio, {target}.fcp7.xml, {target}.srt"
+                    + ("\n  a draft that plays the proxies" if a.proxies else ""))
     r = {}
     if not a.build_only:
         r = timeline.assemble(edit_p, p.path("clips"), p.media_base, p.path("work", cut) / "intermediate", edit_p,
                               audio=p["audio"], external_ids=p.external_clip_ids(), **_timeline_args(p))
-    b = timeline.build(edit_p, p.path("clips"), p.media_base, target, **_timeline_args(p))
-    r["timeline"] = b
+    b = timeline.build(edit_p, p.path("clips"), p.media_base, target, proxies=table, **_timeline_args(p))
+    r["timeline"], r["media"] = b, b["media"]
     text = (f"Camera audio: {r['lowered']} lowered under music, {r['measured']} brought to the target loudness\n" if not a.build_only else "") + b["text"]
     out.result(r, text)
+
+
+def _timeline_media(p, cut):
+    """"proxies" when the timeline of the cut is a draft that plays the proxies, else "footage"."""
+    f = pathlib.Path(str(p.path("timeline", cut)) + ".otio")
+    try:
+        return (read_json(f).get("metadata") or {}).get(p.otio_namespace, {}).get("media") or "footage"
+    except (OSError, ValueError, AttributeError):
+        return "footage"
 
 
 def _fc_config(p):
@@ -237,6 +272,11 @@ def c_filmcraft(a, out):
                              backup=(p.path("work", cut) / "backup_before_build.fcproj") if bridge is not None else None,
                              music_analysis=music_analysis, retime_cues=p["retime"].get("cues"), execute=not a.dry_run)
         r["mode"] = "dry-run" if a.dry_run else ("bridge" if bridge is not None else "headless")
+        r["media"] = _timeline_media(p, cut)
+        if r["media"] == "proxies":
+            r["log"].append("Draft: the project plays the proxies")
+        if not a.dry_run:
+            write_json(p.path("work", cut) / "filmcraft_media.json", {"media": r["media"]})
         if bridge is None and not a.dry_run:
             r["project"] = str(project_file)
         return out.result(r, "\n".join(r["log"]) + (f"\n-> {project_file}" if r.get("project") else ""))
@@ -256,8 +296,12 @@ def c_filmcraft(a, out):
             cl.saved, cl.target = True, project_file
         t0 = time.time()
         res = cl.export(target, preset, settings, a.start, a.end)
-        r = {"output": str(target), "seconds": round(time.time() - t0, 1), "settings": settings, "result": res}
-        return out.result(r, f"Exported: {target} ({r['seconds']} s, subtitles burned in)")
+        built = p.path("work", cut) / "filmcraft_media.json"
+        media = read_json(built)["media"] if built.exists() else _timeline_media(p, cut)
+        r = {"output": str(target), "seconds": round(time.time() - t0, 1), "settings": settings, "result": res, "media": media}
+        draft = ("\nThis is a draft from the proxies. For the final film: cutter timeline " + cut + ", cutter filmcraft build "
+                 + cut + " --overwrite, then export again") if media == "proxies" else ""
+        return out.result(r, f"Exported: {target} ({r['seconds']} s, subtitles burned in)" + draft)
     if a.fc_cmd == "gui":
         raise CutterError("cutter filmcraft gui starts the desktop app on your computer; run it through the launcher bin/cutter", USAGE)
 
@@ -294,7 +338,8 @@ def c_review_data(a, out):
                            levels={"base": p["music"]["base_lufs"], "under": p["music"]["under_dialogue_lufs"], "low": p["music"]["low_lufs"]})
     from .deploy import write_app_config
     write_app_config(p, p.path("review"))
-    out.result(r, f"Review data of {cut}: {r['folder']}")
+    r["media"] = "footage" if video else _timeline_media(p, cut)
+    out.result(r, f"Review data of {cut}: {r['folder']}" + (" (rough render from the proxies)" if r["media"] == "proxies" else ""))
 
 
 def c_review(a, out):
@@ -325,7 +370,8 @@ def c_people(a, out):
     file = analysis / "people.json"
     if a.people_cmd == "list":
         data = people.load(file)
-        rows = [{k: x[k] for k in ("id", "name", "seconds")} | {"clips": sorted(x["clips"])} for x in data["people"]]
+        rows = [{k: x[k] for k in ("id", "name", "seconds")} | {"clips": sorted(x["clips"]), "pictures": [pathlib.PurePosixPath(n).stem for n in x.get("pictures", [])]}
+                for x in data["people"]]
         text = "\n".join(f'  {x["id"]:<4} {x["name"] or "(no name)":<20} {x["seconds"]:>4} s  {", ".join(x["clips"][:12])}'
                          + (" …" if len(x["clips"]) > 12 else "") for x in rows)
         return out.result({"file": str(file), "sheet": str(file.with_suffix(".jpg")) if data.get("sheet") else None, "people": rows},
@@ -334,13 +380,21 @@ def c_people(a, out):
     if a.people_cmd == "name":
         who = people.rename(file, a.id, a.name, dry_run=a.dry_run)
         text = f'{who["id"]} is {who["name"] or "without a name again"}'
-    else:
+    elif a.people_cmd == "merge":
+        if not a.dry_run and p.path("clips").exists():         # a file of 0.2.0 does not hold all faces of a person yet
+            people.update(read_json(p.path("clips")), p.path("image_analysis"), file)
         who = people.merge(file, a.ids, dry_run=a.dry_run)
         text = f'{", ".join(x.upper() for x in a.ids[1:])} merged into {who["id"]}{" " + who["name"] if who["name"] else ""}'
+    clips = read_json(p.path("clips")) if p.path("clips").exists() else []
+    if a.people_cmd == "split":
+        old, who, moved = people.split(file, a.id, a.which, clips, p.path("image_analysis"), to=a.to, dry_run=a.dry_run)
+        text = (f'The faces of {old["id"]} in {", ".join(moved)} are {who["id"]}{" " + who["name"] if who["name"] else ""}'
+                + ("" if a.to else f' (a new ID; cutter people name {who["id"]} "…" names it)'))
     r = {"file": str(file), "id": who["id"], "name": who["name"]}
+    if a.people_cmd == "split":
+        r.update({"from": old["id"], "moved": moved})
     if a.dry_run:
         return _dry(out, r, "  " + text)
-    clips = read_json(p.path("clips"))
     known = people.update(clips, p.path("image_analysis"), file)["people"]
     if (analysis / "quality.txt").exists():
         (analysis / "quality.txt").write_text(image_analysis.readable(clips, p.path("image_analysis"), known), encoding="utf-8")
@@ -482,6 +536,8 @@ def parser():
     p.add_argument("--only", help="only these clip IDs, e.g. C017,C023")
     p.add_argument("--force", action="store_true", help="redo existing results")
     p.add_argument("--no-transcripts", action="store_true"); p.add_argument("--no-sheets", action="store_true")
+    p.add_argument("--proxies", action="store_true",
+                   help="also make proxies of large footage (analysis/proxies/) for fast drafts: cutter timeline --proxies")
     p.add_argument("--no-image", action="store_true",
                    help="skip the image and sound analysis (usable ranges, camera moves, people, wind, place)")
     p.add_argument("--image", action="store_true", help=argparse.SUPPRESS)      # now the default; kept for old scripts
@@ -509,6 +565,9 @@ def parser():
 
     p = cmd("timeline", c_timeline, "set audio levels and build OTIO, FCP 7 XML and SRT", (common, dry))
     p.add_argument("cut"); p.add_argument("--build-only", action="store_true", help="only build, keep the audio levels")
+    p.add_argument("--proxies", action="store_true",
+                   help="a draft: the timeline plays the proxies (cutter analyze --proxies), so the rough render and the "
+                        "FilmCraft export are fast; build it without this option for the final film")
 
     p = cmd("filmcraft", c_filmcraft, "FilmCraft: build the project of a cut (headless), export it, or start the desktop app")
     fs = p.add_subparsers(dest="fc_cmd", required=True)
@@ -547,13 +606,18 @@ def parser():
     q.add_argument("--generate", action="store_true", help="make a random password and print it once (needs no terminal)")
     q.add_argument("--delete", action="store_true", help="remove the reviewer")
 
-    p = cmd("people", c_people, "the people cutter analyze found by their faces: list, name, merge")
+    p = cmd("people", c_people, "the people cutter analyze found by their faces: list, name, merge, split")
     ps = p.add_subparsers(dest="people_cmd", required=True)
     ps.add_parser("list", help="who was found, for how long and in which clips (pictures: analysis/people.jpg)", parents=[common])
     q = ps.add_parser("name", help='give a person a name, e.g. cutter people name P1 "Anna" (an empty name removes it)', parents=[common, dry])
     q.add_argument("id"); q.add_argument("name")
     q = ps.add_parser("merge", help="two or more IDs are the same person; the first ID stays", parents=[common, dry])
     q.add_argument("ids", nargs="+", metavar="id")
+    q = ps.add_parser("split", parents=[common, dry],
+                      help="an ID shows more than one person: file its faces in the given clips (C004) or pictures "
+                           "(C004_1, the names on people.jpg) under a new ID, or under --to")
+    q.add_argument("id"); q.add_argument("which", nargs="+", metavar="clip")
+    q.add_argument("--to", metavar="ID", help="the person these faces are (default: a new ID)")
 
     p = cmd("serve", c_serve, "run the review app (Basic Auth required)", (common, dry))
     p.add_argument("--port", type=int, help="port (default: CUTTER_REVIEW_PORT or 8089)")

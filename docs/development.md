@@ -31,7 +31,8 @@ not a dry run; subprocesses get an empty HOME and no ssh agent (`test_feedback_d
 | `test_review_server.py` | Basic Auth (401/200/503), range requests (206/416), the comment API, `review password`, `serve` refusing to start without a password |
 | `test_feedback_deploy.py` | `feedback fetch`/`reply` on a local database, `deploy --dry-run`, server templates |
 | `test_launcher_agent.py` | the launcher under dash with a Docker stub (mounts, paths, ports, macOS branches), `agent setup` with a temporary HOME, the skill and plugin manifests |
-| `test_footage_quality.py` | camera moves, usable ranges and flaws from samples; wind against an engine; GoPro GPMF and DJI flight logs built at run time; the quality bar; grouping faces into people, keeping IDs, names and merges, `cutter people`; the whole analysis on a generated clip with a known pan and blur (needs OpenCV, so it runs in the image) |
+| `test_footage_quality.py` | camera moves, usable ranges and flaws from samples; wind against an engine; GoPro GPMF and DJI flight logs built at run time; the quality bar; grouping faces into people, keeping IDs, names, merges and splits, `cutter people`; the whole analysis on a generated clip with a known pan and blur (needs OpenCV, so it runs in the image) |
+| `test_proxies.py` | proxies have the frames of their clips, only clips that need one get one, a changed or shorter file is not stood in for; a draft timeline plays the proxies under the same names and the final one the footage; the rough render of a draft |
 | `test_release.py` | the version is the same everywhere; nothing that goes into the image changed under a version that is already tagged |
 | `test_cli.py` | help for every command, JSON results and errors, `new`, `plan`, `doctor`, dry runs |
 | `test_docs.py` | the legacy table in formats.md, relative links |
@@ -47,7 +48,7 @@ generated, so no media is checked in.
 **Inside the image:**
 
 ```sh
-docker run --rm --entrypoint python ghcr.io/aaronblankenburg/cutter:0.2.0 -m unittest discover -s /opt/cutter/tests
+docker run --rm --entrypoint python ghcr.io/aaronblankenburg/cutter:0.2.1 -m unittest discover -s /opt/cutter/tests
 ```
 
 ### Local reference tests

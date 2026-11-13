@@ -402,7 +402,7 @@ def rough_audio(tl, external=("TXT",), levels=None):
         i0 = round(s["start"] * SR)
         mix[i0:i0 + len(x)] += x
     dialogue = [(s["start"], s["end"], s["music_lower"]) for s in tl["shots"] if s["kind"] == "dialogue"]
-    p = dict(base=MUSIC_BASE, under=MUSIC_UNDER, low=MUSIC_LOW, **(levels or {}))
+    p = {"base": MUSIC_BASE, "under": MUSIC_UNDER, "low": MUSIC_LOW, **(levels or {})}
     for m in tl["music"]:
         a, b = m["start"], m["end"]
         L = loudness(m["_path"])
