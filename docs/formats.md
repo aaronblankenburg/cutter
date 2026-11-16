@@ -324,6 +324,9 @@ entries in violet at their places.
    "refs": [{"version": "cut1", "id": 12, "person": "Alice", "t": 8.2, "text": "Too slow here"}]}]}
 ```
 
+An entry with `"kind": "assumption"` records something the agent decided without asking (non-interactive mode,
+skills/video-editing/references/non-interactive.md); the review shows it as such.
+
 Place an entry with `t`/`t_to` (seconds in this cut), `nr`/`nr_to` (shots of this cut), `cut_before` (the cut before
 shot n, ±2 s) or `music` (a cue). Entries without a place are general notes. Every entry needs a unique `id` and a
 `title`; `refs` point to the comments it answers.

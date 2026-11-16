@@ -9,6 +9,10 @@ license: MIT
 You cut the film; cutter does the heavy lifting. Talk to the user in the user's language (German if they write
 German). Keep cutter's own terms (cut1, edit.json, decisions.json) as they are.
 
+**If the project folder contains `briefing.md`, a tool runs you without a person at the keyboard: follow
+[references/non-interactive.md](references/non-interactive.md). Ask nothing; decide and record your assumptions.**
+That file overrides every "ask" below.
+
 ## 1. Set up (once per computer)
 
 cutter lives in a git checkout, by default `${CUTTER_HOME:-~/.local/share/cutter}`; every command runs through its

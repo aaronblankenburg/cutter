@@ -44,6 +44,9 @@ RUN pip install -r /tmp/requirements.txt \
 COPY pyproject.toml README.md LICENSE /opt/cutter/
 COPY src /opt/cutter/src
 COPY tests /opt/cutter/tests
+# the skill and the docs it links to, for agents that run inside the image (non-interactive mode)
+COPY skills /opt/cutter/skills
+COPY docs /opt/cutter/docs
 COPY docker/entrypoint.sh /usr/local/bin/cutter-entrypoint
 RUN pip install --no-deps /opt/cutter \
  && mkdir -p /models /home/cutter \
