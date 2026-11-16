@@ -162,6 +162,15 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
           proxies=None):
     """Build the timeline. Returns a report (dict); writes <out>.otio, <out>_fcp7.xml and, if needed, <out>.srt.
     proxies: {clip ID: {"path", "width", "height"}} (proxies.table) makes it a draft that plays the proxies."""
+    t = make(edit_path, clips_path, base, ns=ns, music_dirs=music_dirs, config_external=config_external,
+             track_names=track_names, texts=texts, metadata_keys=metadata_keys, media_roots=media_roots,
+             project_dir=project_dir, proxies=proxies)
+    return write(t, out, xml_suffix)
+
+
+def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config_external=None, track_names=None,
+         texts=None, metadata_keys="auto", media_roots=None, project_dir=None, proxies=None):
+    """The timeline in memory: {"timeline": OTIO timeline, "clips", "edit", "subtitles", "music", …} (see build)."""
     try:
         import opentimelineio as otio
     except ImportError:
@@ -384,6 +393,17 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
     used = sorted(cid for cid in played if cid in (proxies or {}))
     if proxies is not None:
         tl.metadata[ns] = {"media": "proxies"}             # a draft; review-data and filmcraft export say so
+    return {"timeline": tl, "clips": clips, "edit": edit, "subtitles": subs, "music": music_report, "music_text": report,
+            "scaled": scaled, "cutaways": n_cut, "total": total, "used_proxies": used, "proxies": proxies is not None,
+            "V1": V1, "ns": ns, "legacy": legacy, "fps": fps, "base": base}
+
+
+def write(t, out, xml_suffix=".fcp7.xml"):
+    """Write a timeline from make(): <out>.otio, <out><xml_suffix> (via the OTIO FCP 7 adapter), <out>.srt."""
+    import opentimelineio as otio
+    tl, subs, V1, total = t["timeline"], t["subtitles"], t["V1"], t["total"]
+    scaled, n_cut, report, used, proxies = t["scaled"], t["cutaways"], t["music_text"], t["used_proxies"], t["proxies"]
+    music_report, legacy = t["music"], t["legacy"]
     out = str(out)
     pathlib.Path(out).parent.mkdir(parents=True, exist_ok=True)
     otio.adapters.write_to_file(tl, f"{out}.otio")
@@ -405,9 +425,9 @@ def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), 
     if subs:
         lines.append(f"Subtitles: {len(subs)} to {out}.srt")
     lines += ["Music:", *report]
-    if proxies is not None:
+    if proxies:
         lines.append(f"Draft: {len(used)} clips play their proxies – for the final film build the timeline without --proxies")
-    return {"media": "proxies" if proxies is not None else "footage", "proxies": used, "otio": f"{out}.otio", "xml": f"{out}{xml_suffix}", "srt": srt, "duration": round(total, 3), "clips": n,
+    return {"media": "proxies" if proxies else "footage", "proxies": used, "otio": f"{out}.otio", "xml": f"{out}{xml_suffix}", "srt": srt, "duration": round(total, 3), "clips": n,
             "scaled": len(scaled), "cutaways": n_cut, "subtitles": len(subs), "music": music_report,
             "legacy_metadata": legacy, "text": "\n".join(lines)}
 

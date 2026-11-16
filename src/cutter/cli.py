@@ -208,6 +208,32 @@ def c_timeline(a, out):
     out.result(r, text)
 
 
+def c_export(a, out):
+    p = _project(a)
+    from . import export, paths
+    cut = cut_name(a.cut)
+    target = {"os": a.target_os, "root": a.target_root, "package": a.package, "normalize": a.normalize}
+    try:
+        target = paths.check_target(target)
+    except paths.PathError as ex:
+        raise CutterError(str(ex), USAGE)
+    folder = pathlib.Path(a.out) if a.out else p.path("exports") / f"{cut}-{a.to}"
+    if a.dry_run:
+        return _dry(out, {"cut": cut, "to": a.to, "target": target, "out": str(folder)},
+                    f"  {a.to} package of {cut} -> {folder}\n  media from {target['root']} ({target['os']}), "
+                    f"package files from {paths.join(target, 'x', under_package=True)[:-2]}")
+    relink = read_json(a.relink) if a.relink else None
+    if relink is not None and not (isinstance(relink, dict) and all(isinstance(k, str) and isinstance(v, str)
+                                                                   for k, v in relink.items())):
+        raise CutterError(f"{a.relink}: expected {{\"old rel_path\": \"new rel_path\", …}}", USAGE)
+    r = export.export_package(p, cut, target, folder, to=a.to, relink=relink)
+    lines = [f"{a.to} package of {cut}: {folder}", f"  timeline {r['timeline']}, {len(r['clips'])} clips, "
+             f"{r['titles']} title pictures, {r['markers']} markers"]
+    lines += [f"  ! {n}" for n in r["notes"]]
+    lines.append(f"Unzip or copy it to {paths.join(target, 'x', under_package=True)[:-2]} on the editing computer.")
+    out.result(r, "\n".join(lines))
+
+
 def _timeline_media(p, cut):
     """"proxies" when the timeline of the cut is a draft that plays the proxies, else "footage"."""
     f = pathlib.Path(str(p.path("timeline", cut)) + ".otio")
@@ -569,6 +595,18 @@ def parser():
     p.add_argument("--proxies", action="store_true",
                    help="a draft: the timeline plays the proxies (cutter analyze --proxies), so the rough render and the "
                         "FilmCraft export are fast; build it without this option for the final film")
+
+    p = cmd("export", c_export, "a package for another editor whose clips point to the original files on that computer",
+            (common, dry))
+    p.add_argument("cut")
+    p.add_argument("--to", choices=["premiere"], default="premiere", help="editing application (default: premiere)")
+    p.add_argument("--target-os", required=True, choices=["windows", "macos", "linux"], help="system of the editing computer")
+    p.add_argument("--target-root", required=True,
+                   help="the footage folder on that computer (what the clips' rel_path is relative to), e.g. 'D:\\Videos\\Iceland'")
+    p.add_argument("--package", default="_cutlery", help="folder for music, titles and maps, relative to the root (default: _cutlery)")
+    p.add_argument("--normalize", choices=["keep", "nfc", "nfd"], default="keep", help="Unicode form of the paths (default: as stored)")
+    p.add_argument("--out", help="where to write the package (default: exports/<cut>-<to>)")
+    p.add_argument("--relink", help="JSON file {old rel_path: new rel_path} for originals renamed or moved since the analysis")
 
     p = cmd("filmcraft", c_filmcraft, "FilmCraft: build the project of a cut (headless), export it, or start the desktop app")
     fs = p.add_subparsers(dest="fc_cmd", required=True)

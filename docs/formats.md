@@ -343,6 +343,17 @@ carries metadata under the key `timeline.otio_namespace` (default `cutter`): `nr
 `source_resolution`, `scale_percent`, `audio`, `cutaway_of`. Clips smaller than the sequence (1920×1080) are scaled
 to fill it. Media references are `file://` URLs built from the footage roots.
 
+### Packages for other editors (`cutter export`)
+
+`cutter export cut3 --to premiere --target-os windows --target-root 'D:\Videos\Iceland' [--relink map.json] --out DIR`
+writes into DIR what goes into `<root>/_cutlery` on the editing computer: `<title>_<cut>.xml` (FCP 7 XML for
+Premiere Pro), `<title>_<cut>.srt`, `music/` with `LICENSES.txt`, `titles/` (titles, credits and end-text cards of
+filmcraft.json as transparent PNG) and `maps/`. Clips are at `<root>/<rel_path>` (clips.json), written as file URLs the
+way editors expect them (`file://localhost/D:/…`, UNC, percent-encoded UTF-8; `--normalize nfc|nfd` for macOS). The
+timeline is the one of `cutter timeline` with the clips' own metadata: start timecode, NTSC rates, duration and size.
+Music ducking (the levels FilmCraft sets) becomes volume keyframes; stabilisation, audio cleanup and the decisions of
+decisions.json become sequence markers. `--relink` maps old to new `rel_path`s of originals renamed since the analysis.
+
 ## filmcraft.json
 
 Optional; named by `[filmcraft] config` in cutter.toml. All keys are optional and merge over the defaults

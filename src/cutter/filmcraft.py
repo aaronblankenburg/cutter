@@ -366,6 +366,42 @@ def _music_lufs(cue, fc, music_analysis, retime_cues, files=None):
 
 # ---------------------------------------------------------------- finish
 
+def music_keyframes(a, b, lufs, dialogue, low, mu, fade=None, dip=None):
+    """Volume keyframes {seconds in the sequence: dB} of one music clip from a to b: the base level, lowered under
+    dialogue (shots in `low` even lower), ramps between, a dip under the end text and a fade-out.
+    lufs: the loudness of the track; dialogue: [(start, end, shot nr)] of the dialogue shots; mu: filmcraft.json →
+    music; fade: seconds of fade-out (None: none); dip: (start, end, dB) of the end text. Used by FilmCraft and by the
+    timelines for other editors (export.py), so they get the same mix."""
+    r_down, r_up = mu.get("ramp_down_s", 0.4), mu.get("ramp_up_s", 0.6)
+    base_db = round(mu["base_lufs"] - lufs, 1); kf = {}
+
+    def put(t, v): kf[round(t, 3)] = round(v, 1)
+    duck = lambda nr: round((mu["low_lufs"] if nr in low else mu["under_lufs"]) - lufs, 1)
+    regs = [(s_, e_, nr) for s_, e_, nr in dialogue if s_ < b - 0.05 and e_ > a + 0.05]
+    put(a, base_db if not regs or regs[0][0] > a + 0.05 else duck(regs[0][2]))
+    for i, (s_, e_, nr) in enumerate(regs):
+        prev = regs[i - 1] if i else None
+        if prev and abs(prev[1] - s_) < 0.05:
+            put(s_ - 0.04, kf[max(kf)]); put(s_, duck(nr))
+        elif s_ > a + 0.05:
+            put(max(a, s_ - r_down), base_db); put(s_, duck(nr))
+        nxt = regs[i + 1] if i + 1 < len(regs) else None
+        if nxt and abs(nxt[0] - e_) < 0.05:
+            continue
+        put(e_, duck(nr))
+        if e_ < b - 0.05:
+            put(min(b, e_ + r_up), base_db)
+    if dip and a <= dip[0] < b:
+        put(dip[0] - 0.5, base_db); put(dip[0] + 0.5, base_db + dip[2]); put(dip[1], base_db + dip[2])
+        put(min(b - (fade or 0.0) - 0.1, dip[1] + 1.0), base_db)
+    if fade is not None:
+        t0 = b - fade; last = [v for t, v in sorted(kf.items()) if t <= t0]
+        for t in [t for t in kf if t > t0]:
+            del kf[t]
+        put(t0, last[-1] if last else base_db); put(b - 0.04, -60)
+    return kf
+
+
 def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music_analysis=None, retime_cues=None,
            execute=True):
     """Bring a version in and finish it. Returns log lines and counts."""
@@ -608,36 +644,10 @@ def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music
     low = {nr for nr, s in shots.items() if s.get("audio", {}).get("music_lower")}
     FADE = dict(mu.get("fade_out_s") or {})          # per cue; a "fade_out_s" on the cue in the edit list wins
     FADE.update({m["cue"]: float(m["fade_out_s"]) for m in edit.get("music", []) if m.get("fade_out_s")})
-    r_down, r_up = mu.get("ramp_down_s", 0.4), mu.get("ramp_up_s", 0.6)
     for c in (A[1]["items"] if len(A) > 1 else []):
         cue = c["name"].split()[0]; a, b = c["start"] / T, c["end"] / T
         L = _music_lufs(cue, fc, music_analysis, retime_cues, {m["cue"]: m.get("file") for m in edit.get("music", [])})
-        base_db = round(mu["base_lufs"] - L, 1); kf = {}
-
-        def put(t, v): kf[round(t, 3)] = round(v, 1)
-        duck = lambda nr: round((mu["low_lufs"] if nr in low else mu["under_lufs"]) - L, 1)
-        regs = [(s_, e_, nr) for s_, e_, nr in dialogue_rng if s_ < b - 0.05 and e_ > a + 0.05]
-        put(a, base_db if not regs or regs[0][0] > a + 0.05 else duck(regs[0][2]))
-        for i, (s_, e_, nr) in enumerate(regs):
-            prev = regs[i - 1] if i else None
-            if prev and abs(prev[1] - s_) < 0.05:
-                put(s_ - 0.04, kf[max(kf)]); put(s_, duck(nr))
-            elif s_ > a + 0.05:
-                put(max(a, s_ - r_down), base_db); put(s_, duck(nr))
-            nxt = regs[i + 1] if i + 1 < len(regs) else None
-            if nxt and abs(nxt[0] - e_) < 0.05:
-                continue
-            put(e_, duck(nr))
-            if e_ < b - 0.05:
-                put(min(b, e_ + r_up), base_db)
-        if dip and a <= dip[0] < b:
-            put(dip[0] - 0.5, base_db); put(dip[0] + 0.5, base_db + dip[2]); put(dip[1], base_db + dip[2])
-            put(min(b - FADE.get(cue, 0.0) - 0.1, dip[1] + 1.0), base_db)
-        if cue in FADE:
-            t0 = b - FADE[cue]; last = [v for t, v in sorted(kf.items()) if t <= t0]
-            for t in [t for t in kf if t > t0]:
-                del kf[t]
-            put(t0, last[-1] if last else base_db); put(b - 0.04, -60)
+        kf = music_keyframes(a, b, L, dialogue_rng, low, mu, FADE.get(cue), dip)
         for t, v in sorted(kf.items()):
             add("effects.setParam", {"clip": c["clip"], "effect": "volume", "param": "level", "value": v, "time": tk(t), "keyframe": True})
 
