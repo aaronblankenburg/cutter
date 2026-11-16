@@ -76,6 +76,13 @@ class StandIns(unittest.TestCase):
         self.assertEqual(c["original"]["fingerprint"]["head_sha256"], "a" * 64)
         self.assertEqual(c["original"]["bit_depth"], 10)
 
+    def test_duration_is_the_whole_files_as_ffprobe_reports_it(self):
+        from cutter import analyze
+        sc = sidecar("IMG_7.MOV", "dur/IMG_7.MOV")
+        sc["duration"], sc["format_duration"] = 1.9, 2.0            # the sound runs a little longer than the picture
+        p = self.add("dur/IMG_7.MOV", sc)
+        self.assertEqual(analyze.probe_standin(p, self.media, self.sidecars)["duration"], 2.0)
+
     def test_created_from_the_tags_without_a_dated_name(self):
         from cutter import analyze
         p = self.add("tags/IMG_2.MOV", sidecar("IMG_2.MOV", "tags/IMG_2.MOV"))

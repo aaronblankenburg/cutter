@@ -112,7 +112,8 @@ GPMF samples of the original back to back, as `ffmpeg -map 0:<gpmd track> -c cop
 `<name>.srt` (DJI flight data), both optional. A stand-in without a valid sidecar is skipped with a message.
 
 The sidecar (format `cutlery.sidecar/1`, written by [Cutlery](https://github.com/aaronblankenburg/cutlery), whose
-`docs/sidecar.md` describes every field) must have `file`, `rel_path`, `size`, `duration`, `fingerprint` and, for
+`docs/sidecar.md` describes every field) must have `file`, `rel_path`, `size`, `duration` (the video's; `format_duration`, the whole file's as ffprobe
+reports it, is the clip's `duration` when present), `fingerprint` and, for
 video, `video.{codec,width,height,rotation,r_frame_rate,avg_frame_rate}`. `video.rotation` is degrees clockwise;
 clips.json keeps ffprobe's convention (`rotation` 270 for a clip that is turned 90° clockwise).
 

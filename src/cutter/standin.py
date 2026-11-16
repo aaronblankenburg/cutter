@@ -77,7 +77,8 @@ def clip_from_sidecar(standin, sc, files, probed, parse_time, time_from_name):
         source = "file_date"
     video, audio = sc.get("video"), sc.get("audio")
     clip = {"file": sc["file"], "rel_path": sc["rel_path"], "path": str(standin.resolve()),
-            "size_mb": round(sc["size"] / 1e6, 1), "duration": round(float(sc["duration"]), 3),
+            "size_mb": round(sc["size"] / 1e6, 1),
+            "duration": round(float(sc.get("format_duration") or sc["duration"]), 3),      # ffprobe's format duration
             "created": created.isoformat(sep=" ", timespec="seconds"), "created_source": source,
             "timecode": sc.get("timecode"), "has_video": video is not None, "has_audio": audio is not None}
     from .analyze import guess_device
