@@ -4,7 +4,8 @@
 
 writes into `out` (the folder that goes next to the footage as `<root>/_cutlery`, see paths.py):
 
-    <title>_<cut>.xml      the timeline (FCP 7 XML for Premiere Pro)
+    <title>_<cut>.xml      the timeline: FCP 7 XML for Premiere Pro (fcp7.py),
+    <title>_<cut>.fcpxml   or FCPXML 1.10 for Final Cut Pro and DaVinci Resolve (fcpxml.py)
     <title>_<cut>.srt      subtitles
     music/                 the music files and LICENSES.txt
     titles/                titles, credits and end-text cards as transparent PNG (titles.py)
@@ -28,7 +29,8 @@ from . import filmcraft, paths, timeline, titles
 from .legacy import otio_meta_in
 from .util import CutterError, MISSING, read_json
 
-FORMATS = ("premiere",)
+FORMATS = ("premiere", "fcp", "resolve", "filmcraft")
+TIMELINE_SUFFIX = {"premiere": ".xml", "fcp": ".fcpxml", "resolve": ".fcpxml", "filmcraft": ".fcproj"}
 AUDIO_EXT = timeline.AUDIO_EXT
 
 
@@ -62,6 +64,18 @@ def timecode_frames(tc, timebase, drop):
 
 # ---------------------------------------------------------------- the model
 
+def timeline_args(p):
+    return dict(ns=p.otio_namespace, music_dirs=p.music_dirs(), config_external=p["timeline"]["external_clips"],
+                track_names=p["timeline"]["track_names"], texts=p["timeline"]["texts"], media_roots=p.media_roots(),
+                project_dir=p.folder)
+
+
+def package_url(targ, path):
+    """Where a file the package carries (music, maps) is on the editing computer."""
+    path = pathlib.Path(path)
+    return paths.url(targ, f'{"music" if path.suffix.lower() in AUDIO_EXT else "maps"}/{path.name}', under_package=True)
+
+
 def _seconds(t):
     return t.to_seconds()
 
@@ -74,10 +88,7 @@ def build_model(p, cut, target, relink=None):
     if not edit_p.exists():
         raise CutterError(f"Edit list not found: {edit_p}", MISSING)
     targ = paths.check_target(target)
-    args = dict(ns=p.otio_namespace, music_dirs=p.music_dirs(), config_external=p["timeline"]["external_clips"],
-                track_names=p["timeline"]["track_names"], texts=p["timeline"]["texts"], media_roots=p.media_roots(),
-                project_dir=p.folder)
-    t = timeline.make(edit_p, p.path("clips"), p.media_base, **args)
+    t = timeline.make(edit_p, p.path("clips"), p.media_base, originals=True, **timeline_args(p))
     tl, clips, edit, ns = t["timeline"], t["clips"], t["edit"], t["ns"]
     fps, timebase, ntsc = rate(edit.get("fps", 25))
     frames = lambda sec: round(sec * fps)
@@ -140,7 +151,7 @@ def build_model(p, cut, target, relink=None):
                     v1_items[meta["nr"]] = item
             else:
                 local = pathlib.Path(unquote(urlsplit(ch.media_reference.target_url).path))
-                if local.suffix.lower() in AUDIO_EXT:
+                if local.suffix.lower() in AUDIO_EXT:             # the same folders as package_url
                     f = package_file(local, "music", "audio", seconds=timeline.probe_duration(local) or dur)
                     item["cue"] = tokens[0] if tokens else None
                 else:
@@ -229,10 +240,14 @@ def build_model(p, cut, target, relink=None):
         if not it:
             continue
         if s.get("stabilize"):
+            it["stabilize"] = True
             model["markers"].append({"name": f"Stabilise shot {nr}", "comment": f"{s['clip']}: stabilise (FilmCraft: "
                                      f"Warp Stabilizer, max. {fc['stabilize'].get('max_scale', 125):g} %)",
-                                     "start": it["start"], "duration": it["end"] - it["start"], "color": "red"})
+                                     "start": it["start"], "duration": it["end"] - it["start"], "color": "red",
+                                     "kind": "stabilize"})
         au = s.get("audio") or {}
+        if s.get("kind") == "dialogue" and au.get("noise_reduction"):
+            it["noise_reduction"] = au["noise_reduction"]
         if s.get("kind") == "dialogue" and any(au.get(k) for k in ("noise_reduction", "speech_mix", "compressor", "highpass_hz")):
             what = [f"high-pass {au.get('highpass_hz', fc['audio_chain'].get('highpass_hz', 100))} Hz"]
             if au.get("noise_reduction"):
@@ -242,7 +257,8 @@ def build_model(p, cut, target, relink=None):
             if au.get("compressor"):
                 what.append("compressor")
             model["markers"].append({"name": f"Audio cleanup shot {nr}", "comment": ", ".join(what), "start": it["start"],
-                                     "duration": it["end"] - it["start"], "color": "orange"})
+                                     "duration": it["end"] - it["start"], "color": "orange",
+                                     "kind": "audio"})
     dec_p = p.path("decisions", cut)
     if dec_p.exists():
         for e in read_json(dec_p).get("entries", []):
@@ -254,7 +270,8 @@ def build_model(p, cut, target, relink=None):
                 continue
             text = " ".join(x for x in (e.get("text"), f"Why: {e['why']}" if e.get("why") else None) if x)
             model["markers"].append({"name": f"Decision: {e.get('title', e.get('id'))}", "comment": text, "start": a,
-                                     "duration": max(0, b - a), "color": "purple"})
+                                     "duration": max(0, b - a), "color": "purple",
+                                     "kind": "decision"})
     model["markers"].sort(key=lambda m: m["start"])
     model["duration"] = frames(total)
     model["music"] = [m for m in edit.get("music", [])]
@@ -270,7 +287,7 @@ def safe_name(text):
 def export_package(p, cut, target, out, to="premiere", relink=None):
     if to not in FORMATS:
         raise CutterError(f"Unknown export format {to} (one of {', '.join(FORMATS)})")
-    from . import fcp7
+    from . import fcp7, fcpxml
     model = build_model(p, cut, target, relink)
     out = pathlib.Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -284,11 +301,18 @@ def export_package(p, cut, target, out, to="premiere", relink=None):
             written.append(key)
         else:
             model["notes"].append(f"missing file: {src}")
-    for key, layers, band in model["titles"]:
-        titles.render(layers, out / key, band)
-        written.append(key)
-    xml = out / f"{stem}.xml"
-    xml.write_bytes(fcp7.write(model))
+    if to != "filmcraft":                                 # FilmCraft makes its titles itself
+        for key, layers, band in model["titles"]:
+            titles.render(layers, out / key, band)
+            written.append(key)
+    xml = out / f"{stem}{TIMELINE_SUFFIX[to]}"
+    if to == "premiere":
+        xml.write_bytes(fcp7.write(model))
+    elif to == "filmcraft":
+        model["notes"] += filmcraft_project(p, cut, target, xml, relink)
+    else:
+        xml.write_bytes(fcpxml.write(model, language=(p.get("language") or "en")[:2].lower(),
+                                     applied=("stabilize",) if to == "fcp" else ()))
     written.append(xml.name)
     if model["subtitles"]:
         srt = out / f"{stem}.srt"
@@ -301,10 +325,65 @@ def export_package(p, cut, target, out, to="premiere", relink=None):
         written.append("music/LICENSES.txt")
     report = {"format": to, "folder": str(out), "timeline": xml.name, "files": sorted(written),
               "clips": sorted(f["native"] for f in model["files"].values() if f["kind"] == "footage"),
-              "markers": len(model["markers"]), "titles": len(model["titles"]), "notes": model["notes"],
+              "markers": len(model["markers"]), "titles": 0 if to == "filmcraft" else len(model["titles"]),
+              "notes": model["notes"],
               "music": [{k: m.get(k) for k in ("cue", "title", "artist", "license", "source", "file")} for m in model["music"]],
               "duration": round(model["duration"] / float(model["fps"]), 3)}
     return report
+
+
+def filmcraft_project(p, cut, target, out_file, relink=None):
+    """The FilmCraft project of a cut, built like `cutter filmcraft build` but from a timeline that points to the
+    originals on the editing computer (offline here) and is sized for them. FilmCraft keeps the paths of offline
+    media and finds the files when the project is opened there. Returns notes for the report."""
+    targ = paths.check_target(target)
+    relink = relink or {}
+
+    def url_of(path, clip):
+        if clip and clip.get("rel_path"):
+            return paths.url(targ, relink.get(clip["rel_path"], clip["rel_path"]))
+        return package_url(targ, path)
+
+    edit_p = p.path("edit", cut)
+    work = pathlib.Path(out_file).parent / f".{pathlib.Path(out_file).stem}.build"
+    if work.exists():
+        shutil.rmtree(work)
+    work.mkdir(parents=True)
+    try:
+        t = timeline.make(edit_p, p.path("clips"), p.media_base, originals=True, url_of=url_of, **timeline_args(p))
+        timeline.write(t, work / "timeline")
+        out_file = pathlib.Path(out_file)
+        if out_file.exists():
+            out_file.unlink()
+        client = filmcraft.CliClient(filmcraft.find_cli(), target=out_file, data_dir=work / "filmcraft-data")
+        music_analysis = read_json(p.path("music_analysis")) if p.path("music_analysis").exists() else None
+        srt = work / "timeline.srt"
+        r = filmcraft.finish(client, filmcraft.project_config(p), read_json(edit_p), work / "timeline.fcp7.xml",
+                             srt if srt.exists() else None, work / "filmcraft_batch.jsonl", base=p.media_base,
+                             music_analysis=music_analysis, retime_cues=p["retime"].get("cues"))
+        notes = [x for x in r.get("log", []) if "error" in str(x).lower()]
+        stray = [m for m in filmcraft_media(out_file) if not _on_target(m, targ)]
+        if stray:
+            notes.append("FilmCraft refers to files that are not on the editing computer: " + ", ".join(stray[:5]))
+        return notes
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def filmcraft_media(project_file):
+    """The paths of the media files a FilmCraft project refers to."""
+    data = read_json(project_file)
+    out = []
+    for item in (data.get("project", {}).get("items") or {}).values():
+        f = ((item.get("kind") or {}).get("Media") or {}).get("media", {}).get("File") or {}
+        if f.get("path"):
+            out.append(f["path"])
+    return out
+
+
+def _on_target(path, targ):
+    root = paths.join(targ, "x")[:-1].replace("\\", "/")
+    return path.replace("\\", "/").startswith(root)
 
 
 def srt_text(subs):

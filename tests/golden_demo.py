@@ -27,6 +27,7 @@ OUTPUTS = {  # expected file name: path inside the project
     "timeline.json": ".cutter/review/data/cuts/cut1/timeline.json",
     "filmcraft_batch.jsonl": "cuts/cut1/work/filmcraft_batch.jsonl",
     "cut1.premiere.xml": "exports/cut1-premiere/Demo_cut1.xml",
+    "cut1.fcpxml": "exports/cut1-fcp/Demo_cut1.fcpxml",
 }
 
 
@@ -64,7 +65,9 @@ def run_pipeline(film):
                "review": cli("review-data", "cut1", "--timeline-only", "--project", film),
                "filmcraft": cli("filmcraft", "build", "cut1", "--dry-run", "--project", film),
                "export": cli("export", "cut1", "--project", film, "--target-os", "windows",
-                             "--target-root", "D:\\Videos\\Demo")}
+                             "--target-root", "D:\\Videos\\Demo"),
+               "export_fcp": cli("export", "cut1", "--project", film, "--to", "fcp", "--target-os", "macos",
+                                 "--target-root", "/Volumes/Footage/Demo")}
     return results
 
 

@@ -67,6 +67,36 @@ class FilmCraftHeadless(unittest.TestCase):
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 self.assertGreater(out.stat().st_size, 10_000)
 
+    def test_export_for_another_computer_opens_there_with_the_same_picture(self):
+        """`cutter export --to filmcraft` with the demo folder as the editing computer: the project refers to the
+        originals and the package only, finds them all and shows the picture of the project built here."""
+        d = self.film.parent
+        windows = golden_demo.cli("export", "cut1", "--project", self.film, "--to", "filmcraft", "--target-os",
+                                  "windows", "--target-root", "D:\\Videos\\Demo", "--out", d / "win")
+        from cutter import export
+        media = export.filmcraft_media(d / "win" / windows["timeline"])
+        self.assertTrue(media and all(m.startswith("D:/Videos/Demo/") for m in media), media)
+        self.assertEqual(windows["notes"], [])
+
+        r = golden_demo.cli("export", "cut1", "--project", self.film, "--to", "filmcraft", "--target-os", "linux",
+                            "--target-root", d, "--out", d / "_cutlery")
+        exported = d / "_cutlery" / r["timeline"]
+        self.assertTrue(all(m.startswith(str(d) + "/") for m in export.filmcraft_media(exported)))
+        names = json.loads(subprocess.run([CLI, "--compact", "--project", str(exported), "inspect", "project"],
+                                          capture_output=True, text=True).stdout)["root"]["children"]
+        self.assertFalse([c["name"] for c in names if "%" in c["name"]])
+        for t in (2.0, 11.5, 27.5):
+            with self.subTest(seconds=t):
+                here, there = self.film / f"here_{t}.png", self.film / f"there_{t}.png"
+                for project, out in ((self.project, here), (exported, there)):
+                    res = subprocess.run([CLI, "--compact", "--data-dir", str(d / "fd"), "--project", str(project),
+                                          "render", "--seconds", str(t), "--out", str(out)], capture_output=True, text=True,
+                                         env={k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY")})
+                    self.assertEqual(res.returncode, 0, res.stdout + res.stderr)      # exits 1 on offline media
+                cmp = subprocess.run(["ffmpeg", "-nostdin", "-v", "info", "-i", str(here), "-i", str(there), "-lavfi",
+                                      "ssim", "-f", "null", "-"], capture_output=True, text=True)
+                self.assertGreater(float(cmp.stderr.rsplit("All:", 1)[1].split()[0]), 0.97)
+
 
 @unittest.skipUnless(CLI and os.access(CLI, os.X_OK), "filmcraft-cli not available (set FILMCRAFT_CLI)")
 @unittest.skipUnless(TOOLS and FFMPEG, "needs numpy, OpenTimelineIO and ffmpeg")

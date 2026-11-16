@@ -72,6 +72,21 @@ def load_config(path=None):
     return _merge(DEFAULTS, raw)
 
 
+def project_config(p):
+    """The FilmCraft settings of a project: its filmcraft.json, completed from cutter.toml."""
+    cfg = p["filmcraft"]
+    path = cfg.get("config")
+    fc = load_config(p.path(path) if path else None)
+    for cue, sec in (p["music"].get("fade_out_s") or {}).items():
+        fc["music"]["fade_out_s"].setdefault(cue, sec)            # cutter.toml → music.fade_out_s
+    if not fc["captions"].get("language") and p.get("language"):
+        fc["captions"]["language"] = p.get("language")          # subtitle track language = spoken language
+    for k, v in cfg.items():                          # [filmcraft] keys in cutter.toml override
+        if k in DEFAULTS and not isinstance(v, dict):
+            fc[k] = v
+    return fc
+
+
 # ---------------------------------------------------------------- locating filmcraft-cli
 
 def cache_dir():

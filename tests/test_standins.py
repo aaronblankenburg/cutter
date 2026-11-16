@@ -156,6 +156,16 @@ class StandIns(unittest.TestCase):
         self.assertTrue(proxies.needed(original))
         self.assertFalse(proxies.needed({**original, "standin": {"width": 640, "height": 360}}))
 
+    def test_local_timelines_size_the_stand_ins_not_the_originals(self):
+        from cutter import timeline
+        clips = {"C1": {"path": "/m/a.mp4", "file": "A.MOV", "width": 3840, "height": 2160, "rotation": 270,
+                        "standin": {"width": 360, "height": 640}}, "C2": {"path": "/m/b.mp4", "width": 1920, "height": 1080}}
+        out = timeline.use_standins({k: dict(v) for k, v in clips.items()})
+        self.assertEqual((out["C1"]["width"], out["C1"]["height"], out["C1"]["rotation"]), (360, 640, 0))
+        self.assertEqual(out["C1"]["source_name"], "A.MOV")
+        self.assertEqual(out["C2"], clips["C2"])
+        self.assertEqual(timeline.fill_scale(640, 360), 300)            # a 360p stand-in fills 1080p at 300 %
+
     def test_low_detail_compares_clips_of_the_same_analysed_size(self):
         from cutter import image_analysis
         a = {"width": 3840, "height": 2160, "standin": {"width": 640, "height": 360}}

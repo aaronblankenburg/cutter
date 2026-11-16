@@ -245,17 +245,7 @@ def _timeline_media(p, cut):
 
 def _fc_config(p):
     from . import filmcraft
-    cfg = p["filmcraft"]
-    path = cfg.get("config")
-    fc = filmcraft.load_config(p.path(path) if path else None)
-    for cue, sec in (p["music"].get("fade_out_s") or {}).items():
-        fc["music"]["fade_out_s"].setdefault(cue, sec)            # cutter.toml → music.fade_out_s
-    if not fc["captions"].get("language") and p.get("language"):
-        fc["captions"]["language"] = p.get("language")          # subtitle track language = spoken language
-    for k, v in cfg.items():                          # [filmcraft] keys in cutter.toml override
-        if k in filmcraft.DEFAULTS and not isinstance(v, dict):
-            fc[k] = v
-    return fc
+    return filmcraft.project_config(p)
 
 
 def c_filmcraft(a, out):
@@ -600,7 +590,9 @@ def parser():
     p = cmd("export", c_export, "a package for another editor whose clips point to the original files on that computer",
             (common, dry))
     p.add_argument("cut")
-    p.add_argument("--to", choices=["premiere"], default="premiere", help="editing application (default: premiere)")
+    p.add_argument("--to", choices=["premiere", "fcp", "resolve", "filmcraft"], default="premiere",
+                   help="editing application: premiere (FCP 7 XML), fcp or resolve (FCPXML 1.10), filmcraft (a "
+                        "FilmCraft project built for the originals); default: premiere")
     p.add_argument("--target-os", required=True, choices=["windows", "macos", "linux"], help="system of the editing computer")
     p.add_argument("--target-root", required=True,
                    help="the footage folder on that computer (what the clips' rel_path is relative to), e.g. 'D:\\Videos\\Iceland'")

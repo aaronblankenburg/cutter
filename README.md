@@ -248,7 +248,7 @@ If the tags say nothing, the agent asks you instead of guessing.
 | `cutter filmcraft build` / `export <cut>` | Build the FilmCraft project; export the MP4 with burned-in subtitles |
 | `cutter filmcraft gui` | Start the FilmCraft desktop app with its control channel (optional) |
 | `cutter map` | Overview and route maps for intros |
-| `cutter export <cut> --target-os … --target-root …` | A package for Premiere Pro whose clips point to the original files on another computer (titles as PNG, music ducking as keyframes, markers) |
+| `cutter export <cut> --to premiere\|fcp\|resolve\|filmcraft --target-os … --target-root …` | A package for Premiere Pro, Final Cut Pro, DaVinci Resolve or FilmCraft whose clips point to the original files on another computer (titles, music ducking as keyframes, markers) |
 | `cutter review-data <cut>` | Prepare a cut for the review app |
 | `cutter review password <name>` | Add a reviewer or change their password; `--generate` makes one and prints it once, `--delete` removes the reviewer |
 | `cutter serve` | Run the review app |

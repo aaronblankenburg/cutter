@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
+from urllib.parse import unquote
 from xml.dom import minidom
 
 from .legacy import EXTERNAL_KEYS, edit_from_legacy, otio_meta_in, otio_meta_out
@@ -93,6 +94,9 @@ def tidy_fcp_xml(path):
     for parent in root.iter("file"):
         for ch in parent.findall("media"):
             parent.remove(ch); parent.append(ch)
+        name = parent.find("name")                # the adapter takes the name from the URL: "a%20b.mp4"
+        if name is not None and name.text and "%" in name.text:
+            name.text = unquote(name.text)
     for seq in root.iter("sequence"):          # media after name/duration/rate
         med, rate = seq.find("media"), seq.find("rate")
         if med is not None and rate is not None:
@@ -137,6 +141,17 @@ def resolve_clips(clips, media_roots=None):
     return clips
 
 
+def use_standins(clips):
+    """Clips analysed from stand-ins (standin.py) carry the original's metadata; a timeline that plays the stand-ins
+    needs their picture size instead (they are stored upright). The name on the timeline stays the original's."""
+    for cid, c in clips.items():
+        x = c.get("standin") or {}
+        if x.get("width") and x.get("height"):
+            clips[cid] = dict(c, width=x["width"], height=x["height"], rotation=0,
+                              source_name=c.get("source_name") or c.get("file") or pathlib.Path(c["path"]).name)
+    return clips
+
+
 def use_proxies(clips, proxies):
     """The clips with their proxies in place of the footage: path and picture size are the proxy's (it is stored
     upright), everything else – times, frame rate, the name on the timeline – stays the clip's."""
@@ -159,18 +174,22 @@ def load_edit(path):
 
 def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), config_external=None,
           track_names=None, texts=None, metadata_keys="auto", media_roots=None, xml_suffix=".fcp7.xml", project_dir=None,
-          proxies=None):
+          proxies=None, originals=False, url_of=None):
     """Build the timeline. Returns a report (dict); writes <out>.otio, <out>_fcp7.xml and, if needed, <out>.srt.
     proxies: {clip ID: {"path", "width", "height"}} (proxies.table) makes it a draft that plays the proxies."""
     t = make(edit_path, clips_path, base, ns=ns, music_dirs=music_dirs, config_external=config_external,
              track_names=track_names, texts=texts, metadata_keys=metadata_keys, media_roots=media_roots,
-             project_dir=project_dir, proxies=proxies)
+             project_dir=project_dir, proxies=proxies, originals=originals, url_of=url_of)
     return write(t, out, xml_suffix)
 
 
 def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config_external=None, track_names=None,
-         texts=None, metadata_keys="auto", media_roots=None, project_dir=None, proxies=None):
-    """The timeline in memory: {"timeline": OTIO timeline, "clips", "edit", "subtitles", "music", …} (see build)."""
+         texts=None, metadata_keys="auto", media_roots=None, project_dir=None, proxies=None, originals=False,
+         url_of=None):
+    """The timeline in memory: {"timeline": OTIO timeline, "clips", "edit", "subtitles", "music", …} (see build).
+    originals: size and scale the shots for the original footage rather than the stand-ins the server has (export).
+    url_of(path, clip): the media reference of a file (clip: its clips.json entry for footage, else None) when the
+    timeline is meant for another computer; default: the local file URL."""
     try:
         import opentimelineio as otio
     except ImportError:
@@ -184,6 +203,8 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
         legacy = metadata_keys == "legacy"
     meta_out = lambda m: otio_meta_out(m, legacy)
     clips = resolve_clips({c["id"]: c for c in read_json(clips_path)}, media_roots)
+    if not originals:
+        clips = use_standins(clips)
     if proxies is not None:
         clips = use_proxies(clips, proxies)
     base, fps = pathlib.Path(base), float(edit.get("fps", 25))
@@ -199,9 +220,10 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
     def rt(sec, rate=fps):
         return RT(round(sec * rate), rate)
 
-    def ext_ref(path, length=None, rate=fps):
+    def ext_ref(path, length=None, rate=fps, clip=None):
         rng = TR(rt(0, rate), rt(length, rate)) if length else None
-        return otio.schema.ExternalReference(target_url=pathlib.Path(path).as_uri(), available_range=rng)
+        url = url_of(path, clip) if url_of else pathlib.Path(path).as_uri()
+        return otio.schema.ExternalReference(target_url=url, available_range=rng)
 
     def gap(sec):
         return otio.schema.Gap(source_range=TR(RT(0, fps), rt(sec)))
@@ -233,7 +255,7 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
             for tr in (V1, A1):
                 m = dict(base_meta)
                 extra = {}
-                ref = ext_ref(c["path"], c["duration"], r)
+                ref = ext_ref(c["path"], c["duration"], r, clip=c)
                 ref.metadata["fcp_xml"] = fcp_file_meta(w, h)
                 if tr is V1:
                     m.update({"source_resolution": f"{w}x{h}", "scale_percent": round(scale, 4)})
@@ -364,7 +386,7 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
                     V4.append(gap(start - cur4))
                 w, h = c.get("width") or FRAME_W, c.get("height") or FRAME_H
                 scale = fill_scale(w, h, c.get("rotation") or 0)
-                ref = ext_ref(c["path"], c["duration"], r)
+                ref = ext_ref(c["path"], c["duration"], r, clip=c)
                 ref.metadata["fcp_xml"] = fcp_file_meta(w, h)
                 cl = otio.schema.Clip(name=f'{s["nr"]:02d}e {e["clip"]} {_file_name(c)}', media_reference=ref,
                                       source_range=TR(rt(e["in"], r), rt(dur, r)),

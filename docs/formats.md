@@ -349,14 +349,24 @@ to fill it. Media references are `file://` URLs built from the footage roots.
 
 ### Packages for other editors (`cutter export`)
 
-`cutter export cut3 --to premiere --target-os windows --target-root 'D:\Videos\Iceland' [--relink map.json] --out DIR`
-writes into DIR what goes into `<root>/_cutlery` on the editing computer: `<title>_<cut>.xml` (FCP 7 XML for
-Premiere Pro), `<title>_<cut>.srt`, `music/` with `LICENSES.txt`, `titles/` (titles, credits and end-text cards of
-filmcraft.json as transparent PNG) and `maps/`. Clips are at `<root>/<rel_path>` (clips.json), written as file URLs the
-way editors expect them (`file://localhost/D:/…`, UNC, percent-encoded UTF-8; `--normalize nfc|nfd` for macOS). The
-timeline is the one of `cutter timeline` with the clips' own metadata: start timecode, NTSC rates, duration and size.
-Music ducking (the levels FilmCraft sets) becomes volume keyframes; stabilisation, audio cleanup and the decisions of
-decisions.json become sequence markers. `--relink` maps old to new `rel_path`s of originals renamed since the analysis.
+`cutter export cut3 --to premiere|fcp|resolve|filmcraft --target-os windows --target-root 'D:\Videos\Iceland'
+[--relink map.json] --out DIR` writes into DIR what goes into `<root>/_cutlery` on the editing computer: the timeline
+`<title>_<cut>.<ext>`, `<title>_<cut>.srt`, `music/` with `LICENSES.txt`, `titles/` (titles, credits and end-text cards
+of filmcraft.json as transparent PNG; not for FilmCraft, which makes its own) and `maps/`. Clips are at
+`<root>/<rel_path>` (clips.json), written as file URLs the way editors expect them (`file://localhost/D:/…`, UNC,
+percent-encoded UTF-8; `--normalize nfc|nfd` for macOS). The timeline is the one of `cutter timeline`, sized for the
+originals (never for stand-ins or proxies), with the clips' own metadata: start timecode, NTSC rates, duration and
+size. `--relink` maps old to new `rel_path`s of originals renamed since the analysis.
+
+| `--to` | Timeline | What is carried over |
+|---|---|---|
+| `premiere` | `.xml`, FCP 7 XML (xmeml 4, `fcp7.py`) | picture size (Basic Motion), dialogue levels, music ducking as volume keyframes, titles as PNG with opacity keyframes; stabilisation, audio cleanup and the decisions of decisions.json as sequence markers |
+| `fcp`, `resolve` | `.fcpxml`, FCPXML 1.10 (`fcpxml.py`, checked against Apple's DTD) | the same, plus stabilisation (`adjust-stabilization`) and noise reduction (`adjust-noiseReduction`) applied, subtitles as captions; markers sit on the clip they start in |
+| `filmcraft` | `.fcproj` | the project `cutter filmcraft build` makes (titles, credits, map, audio chain, stabilisation, ducking, captions), built from a timeline that points to the originals; FilmCraft keeps the paths of the media that are offline on the server and finds them on the editing computer |
+
+DaVinci Resolve gets FCPXML rather than FCP 7 XML or OTIO: it keeps start timecode, frame rates, volume keyframes,
+markers with notes and captions, and Resolve's FCPXML import is the one Blackmagic maintains for round trips with
+Final Cut. OTIO has no standard place for keyframes or effects.
 
 ## filmcraft.json
 

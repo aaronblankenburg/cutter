@@ -29,7 +29,7 @@
                             <clipitem frameBlend="FALSE" id="clipitem-1">
                                 <file id="file-1">
                                     <pathurl>file:///demo/footage/camera/2024-05-01%2009-00-00%20clip01.mp4</pathurl>
-                                    <name>2024-05-01%2009-00-00%20clip01.mp4</name>
+                                    <name>2024-05-01 09-00-00 clip01.mp4</name>
                                     <rate>
                                         <timebase>25</timebase>
                                         <ntsc>FALSE</ntsc>
@@ -91,7 +91,7 @@
                             <clipitem frameBlend="FALSE" id="clipitem-2">
                                 <file id="file-2">
                                     <pathurl>file:///demo/footage/camera/2024-05-01%2009-05-00%20clip02.mp4</pathurl>
-                                    <name>2024-05-01%2009-05-00%20clip02.mp4</name>
+                                    <name>2024-05-01 09-05-00 clip02.mp4</name>
                                     <rate>
                                         <timebase>25</timebase>
                                         <ntsc>FALSE</ntsc>
@@ -153,7 +153,7 @@
                             <clipitem frameBlend="FALSE" id="clipitem-3">
                                 <file id="file-3">
                                     <pathurl>file:///demo/footage/camera/2024-05-01%2009-10-00%20clip03.mp4</pathurl>
-                                    <name>2024-05-01%2009-10-00%20clip03.mp4</name>
+                                    <name>2024-05-01 09-10-00 clip03.mp4</name>
                                     <rate>
                                         <timebase>25</timebase>
                                         <ntsc>FALSE</ntsc>
@@ -215,7 +215,7 @@
                             <clipitem frameBlend="FALSE" id="clipitem-4">
                                 <file id="file-4">
                                     <pathurl>file:///demo/footage/camera/2024-05-01%2009-15-00%20clip04.mp4</pathurl>
-                                    <name>2024-05-01%2009-15-00%20clip04.mp4</name>
+                                    <name>2024-05-01 09-15-00 clip04.mp4</name>
                                     <rate>
                                         <timebase>25</timebase>
                                         <ntsc>FALSE</ntsc>
@@ -277,7 +277,7 @@
                             <clipitem frameBlend="FALSE" id="clipitem-5">
                                 <file id="file-5">
                                     <pathurl>file:///demo/footage/camera/2024-05-01%2009-20-00%20clip05.mp4</pathurl>
-                                    <name>2024-05-01%2009-20-00%20clip05.mp4</name>
+                                    <name>2024-05-01 09-20-00 clip05.mp4</name>
                                     <rate>
                                         <timebase>30</timebase>
                                         <ntsc>TRUE</ntsc>
