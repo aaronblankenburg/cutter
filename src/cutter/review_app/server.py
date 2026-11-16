@@ -908,6 +908,7 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8089)
     ap.add_argument("--data", default=os.path.join(here, "..", "data"), help="folder with cuts/ and feedback.sqlite")
+    ap.add_argument("--media", help="folder with the cuts/ of the rendered videos, if not --data")
     ap.add_argument("--htpasswd", default=os.path.join(here, "..", "htpasswd"), help="file with name:hash lines")
     a = ap.parse_args()
     data = os.path.abspath(a.data)
@@ -915,7 +916,7 @@ def main():
     srv = Server((a.host, a.port), Handler)
     srv.data = data
     srv.auth = Auth(os.path.abspath(a.htpasswd))
-    srv.cuts = Cuts(data)
+    srv.cuts = Cuts(os.path.abspath(a.media) if a.media else data)
     srv.store = Store(os.path.join(data, "feedback.sqlite"))
     srv.app_config = AppConfig(os.path.join(data, "project.json"))
     print(f"cutter review on http://{a.host}:{a.port}/  data: {data}  cuts: {', '.join(srv.cuts.names()) or '-'}", flush=True)

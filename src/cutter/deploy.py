@@ -96,7 +96,7 @@ def run(p, what, env_file=None, dry_run=False):
 
 def _run(p, what, env, host, target, cmds, tmp, dry_run):
     q = shlex.quote
-    local_data = p.path("review") if p is not None else None
+    local_data = p.path("review_media") if p is not None else None
     restart = False
     for w in what:
         if w == "app":

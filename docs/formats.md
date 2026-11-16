@@ -79,6 +79,7 @@ export_preset = "Match Source – Adaptive Low Bitrate"
 # clips = "analysis/clips.json"   transcripts = "analysis/transcripts"   music_analysis = "music/music.json"
 # edit = "cuts/{cut}/edit.json"   decisions = "cuts/{cut}/decisions.json"   timeline = "cuts/{cut}/{cut}"
 # exports = "exports"   review = ".cutter/review/data"   htpasswd = ".cutter/review/htpasswd"
+# review_media = ""      the rendered cuts of the review app (cuts/<cut>/); empty: inside review, next to the comments
 ```
 
 Only the keys you set are needed; everything else has the defaults shown. `cutter.json` with the same structure
@@ -384,7 +385,7 @@ Optional; named by `[filmcraft] config` in cutter.toml. All keys are optional an
  "edit_points": [{"t", "before", "after", "kind": "shot|cutaway_in|cutaway_out"}],
  "music": [{"cue", "title", "artist", "license", "file", "start", "end", "source_start", "fade_out_s", "bpm", "note"}],
  "subtitles": [{"start", "end", "text"}], "markers": [{"name", "t", "duration"}],
- "decisions": {"title", "intro", "compared_to", "date", "entries": [{"id", "title", "t", "t_to", "text", "why", "question", "refs"}]},
+ "decisions": {"title", "intro", "compared_to", "date", "entries": [{"id", "title", "t", "t_to", "text", "why", "question", "refs", "kind"}]},
  "video": {"file", "width", "height", "fps", "duration", "numbers_burned_in"},
  "thumbnails": {"vtt", "interval", "width", "height", "count"}, "poster": "poster.jpg",
  "source": {"edit", "otio", "video", "video_kind", "decisions"}, "created": "…"}

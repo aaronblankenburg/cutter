@@ -251,9 +251,12 @@ def decisions(path, tl):
                 fail(f"{eid}: a reference needs person and text")
             refs.append({"version": r.get("version", d.get("compared_to")), "id": r.get("id"), "person": r["person"],
                          "t": r.get("t"), "text": r["text"]})
-        out.append({"id": eid, "title": e["title"], "t": None if t is None else round(t, 3),
-                    "t_to": None if t_to is None else round(t_to, 3), "text": e.get("text", ""),
-                    "why": e.get("why"), "question": e.get("question"), "refs": refs})
+        entry = {"id": eid, "title": e["title"], "t": None if t is None else round(t, 3),
+                 "t_to": None if t_to is None else round(t_to, 3), "text": e.get("text", ""),
+                 "why": e.get("why"), "question": e.get("question"), "refs": refs}
+        if e.get("kind"):                       # "assumption": decided without asking (non-interactive mode)
+            entry["kind"] = e["kind"]
+        out.append(entry)
     out.sort(key=lambda x: (x["t"] is not None, x["t"] or 0.0))     # general entries first, then by time
     return {"title": d.get("title") or "Changes and decisions", "intro": d.get("intro"),
             "compared_to": d.get("compared_to"), "date": d.get("date"), "entries": out}

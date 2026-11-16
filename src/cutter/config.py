@@ -47,6 +47,7 @@ DEFAULTS = {
         "feedback": "cuts/{cut}/feedback.json",
         "exports": "exports",
         "review": ".cutter/review/data",
+        "review_media": "",           # cuts/<cut>/ of the review app (video, thumbnails, timeline.json); empty: in "review"
         "htpasswd": ".cutter/review/htpasswd",
     },
     "timeline": {
@@ -214,6 +215,8 @@ class Project:
 
     def path(self, key, cut=None):
         """Path from the configuration (a key in 'paths' or a path), with {cut} replaced."""
+        if key == "review_media" and not self.c["paths"].get("review_media"):
+            return self.path("review")        # the rendered cuts next to the comments, unless placed elsewhere
         raw = self.c["paths"].get(key, key)
         if cut is not None:
             raw = raw.replace("{cut}", cut_name(cut))

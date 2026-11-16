@@ -349,7 +349,7 @@ def c_review_data(a, out):
     cut = cut_name(a.cut)
     edit = p.path("edit", cut)
     otio = pathlib.Path(str(p.path("timeline", cut)) + ".otio")
-    target = p.path("review") / "cuts"
+    target = p.path("review_media") / "cuts"
     dec = p.path("decisions", cut)
     video = a.video
     if video is None and not a.rough and (p.path("exports") / f"{cut}.mp4").exists():
@@ -451,6 +451,7 @@ def c_serve(a, out):
         for u in addresses(port, bind):
             print(u, flush=True)
     os.execv(sys.executable, [sys.executable, str(server), "--host", bind, "--port", str(port), "--data", str(data),
+                              "--media", str(p.path("review_media")),
                               "--htpasswd", str(htpasswd)])
 
 
