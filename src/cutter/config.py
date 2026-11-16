@@ -92,6 +92,9 @@ DEFAULTS = {
         "url": "",
         "ui_language": "",
     },
+    "standins": {
+        "sidecars": "",         # folder with the sidecars of the stand-in files in [media] (see standin.py)
+    },
     "proxies": {
         "make": False,          # true: every cutter analyze makes the missing proxies (as --proxies does)
         "height": 720,
@@ -203,6 +206,11 @@ class Project:
 
     def get(self, k, default=None):
         return self.c.get(k, default)
+
+    def path_of(self, raw):
+        """A path from the configuration: relative to the project folder, ~ expanded."""
+        p = pathlib.Path(os.path.expanduser(raw))
+        return p if p.is_absolute() else self.folder / p
 
     def path(self, key, cut=None):
         """Path from the configuration (a key in 'paths' or a path), with {cut} replaced."""

@@ -173,6 +173,33 @@ def guess_device(tags, video):
     return " ".join(dict.fromkeys(parts))[:80] or None
 
 
+def containing_root(path, inputs):
+    """The input folder that contains the file (its own folder if an input was a single file)."""
+    for raw in inputs:
+        root = Path(raw).expanduser().resolve()
+        if path.is_relative_to(root):
+            return root
+    return path.parent
+
+
+def probe_standin(path, root, sidecars):
+    """clips.json entry of a stand-in: everything about the original from its sidecar (see standin.py)."""
+    from . import standin
+    files = standin.sidecar_files(path, root, sidecars)
+    if not files["json"].is_file():
+        raise RuntimeError(f"no sidecar {files['json']}")
+    try:
+        sc = standin.load(files["json"])
+    except (ValueError, OSError) as e:
+        raise RuntimeError(f"{files['json']}: {e}")
+    probed = ffprobe(path)
+    clip = standin.clip_from_sidecar(path, sc, files, probed, parse_time, time_from_name)
+    problem = standin.length_problem(clip, probed)
+    if problem:
+        log(f"  ! {clip['rel_path']}: {problem}")
+    return clip
+
+
 def probe_clip(path, base):
     info = ffprobe(path)
     fmt = info.get("format") or {}
@@ -220,18 +247,19 @@ def probe_clip(path, base):
 
 def assign_ids(clips, out):
     """Keep IDs from earlier runs, append new clips chronologically."""
+    from .standin import key
     known = {}
     cj = out / "clips.json"
     if cj.exists():
         try:
-            known = {c["path"]: c["id"] for c in json.loads(cj.read_text(encoding="utf-8"))}
+            known = {key(c): c["id"] for c in json.loads(cj.read_text(encoding="utf-8"))}
         except (ValueError, KeyError, TypeError, OSError):
             known = {}
     nums = [int(i[1:]) for i in known.values() if i[1:].isdigit()]
     nxt = max(nums, default=0) + 1
     for c in sorted(clips, key=lambda c: (c["created"], c["rel_path"])):
-        if c["path"] in known:
-            c["id"] = known[c["path"]]
+        if key(c) in known:
+            c["id"] = known[key(c)]
         else:
             c["id"] = f"C{nxt:03d}"
             nxt += 1
@@ -591,7 +619,7 @@ def media_ref(path, roots):
 
 def run_analysis(inputs, out, list_only=False, since=None, until=None, exclude=(), only=None, force=False,
                  no_transcripts=False, no_sheets=False, model="large-v3-turbo", language="auto", device="auto",
-                 threads=4, max_frames=24, interval=None, roots=None):
+                 threads=4, max_frames=24, interval=None, roots=None, standins=None):
     if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
         raise CutterError("ffmpeg/ffprobe not found", MISSING, "Use the Docker image: bin/cutter analyze")
     files, base = collect(inputs)
@@ -603,9 +631,15 @@ def run_analysis(inputs, out, list_only=False, since=None, until=None, exclude=(
         raise CutterError("No video files found.", MISSING)
     log(f"{len(files)} video files found, reading metadata …")
     clips = []
+    if standins:                          # the files are stand-ins; their sidecars hold the original's metadata
+        from . import standin
+        standin.require_sidecars(standins)
     for f in files:
         try:
-            clips.append(probe_clip(f, base))
+            if standins:
+                clips.append(probe_standin(f, containing_root(f, inputs), standins))
+            else:
+                clips.append(probe_clip(f, base))
         except Exception as e:
             log(f"  ! skipped: {f} ({e})")
     clips = filter_dates(clips, since, until)

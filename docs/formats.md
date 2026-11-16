@@ -64,6 +64,9 @@ beats_from = "M1"               # use another cue's beats (a second excerpt of t
 [image_analysis]
 recognize_faces = false         # do not work out who is who (default: true; see people.json)
 
+[standins]
+sidecars = "../sidecars"        # [media] holds small stand-in copies; this folder has the originals' metadata (see below)
+
 [proxies]
 make = true                     # every cutter analyze makes the missing proxies, as --proxies does (default: false)
 height = 720                    # of the proxies (default: 720)
@@ -97,6 +100,36 @@ works as well. Cut names: `cut1`, `cut2`, …; commands also accept `3` for `cut
 `media` is what counts: the clip's footage root and its path below it. `path` is informational; timelines are always
 built from `media` and the roots in cutter.toml. `created_source` is `metadata`, `filename` or `file_date`. `gps` is
 there when the file names the place (phones do).
+
+### Stand-ins and sidecars
+
+A tool that cannot hand over the original footage (a web app whose browser makes small copies, say) gives cutter a
+folder of **stand-ins** in `[media]` and a folder of **sidecars** in `[standins] sidecars`. cutter analyses the
+stand-ins, but `clips.json` states what the *originals* are, so that timelines built from it match the originals.
+
+For a stand-in `<media root>/<name>.mp4` the files are `<sidecars>/<name>.json` (required), `<name>.gpmd` (the GoPro
+GPMF samples of the original back to back, as `ffmpeg -map 0:<gpmd track> -c copy -f data` writes them) and
+`<name>.srt` (DJI flight data), both optional. A stand-in without a valid sidecar is skipped with a message.
+
+The sidecar (format `cutlery.sidecar/1`, written by [Cutlery](https://github.com/aaronblankenburg/cutlery), whose
+`docs/sidecar.md` describes every field) must have `file`, `rel_path`, `size`, `duration`, `fingerprint` and, for
+video, `video.{codec,width,height,rotation,r_frame_rate,avg_frame_rate}`. `video.rotation` is degrees clockwise;
+clips.json keeps ffprobe's convention (`rotation` 270 for a clip that is turned 90° clockwise).
+
+What changes in `clips.json`: `file`, `rel_path`, `size_mb`, `duration`, `created` (the original's name first, then its
+tags), `codec`, `width`, `height`, `rotation`, `fps*`, `timecode`, `device`, `gps` and the audio fields are the
+original's. `path` and `media` are the stand-in's, because that is the file every tool reads. Added:
+
+```json
+"standin": {"width": 640, "height": 360},
+"original": {"name": "IMG_4821.MOV", "size": 1234567890, "mtime": "2024-06-01T10:15:00Z",
+             "fingerprint": {"size": 1234567890, "head_sha256": "…", "tail_sha256": "…"}, "bit_depth": 10, "codec_string": "hvc1.2.4.L153.B0"},
+"telemetry_files": {"gpmd": "/…/IMG_4821.MOV.gpmd"}
+```
+
+Clip IDs follow the fingerprint, so a renamed original keeps its ID. Stand-ins never get proxies (`proxies.needed`),
+and `low_detail` compares clips of the same *analysed* size. A stand-in whose length differs from the original's by
+more than 2 frames + 0.02 s (the proxy contract) is reported.
 
 ## Transcripts
 

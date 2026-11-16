@@ -32,6 +32,8 @@ def _display(clip):
 
 
 def needed(clip, height=HEIGHT):
+    if clip.get("standin"):                  # the file is a small copy already (standin.py); the sidecar has the original's size
+        return False
     w, h = _display(clip)
     return bool(clip.get("has_video", True)) and (min(w, h) > height or (clip.get("codec") or "h264") not in EASY)
 

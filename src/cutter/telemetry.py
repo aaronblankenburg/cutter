@@ -169,23 +169,27 @@ def dji_srt(text):
 
 # ------------------------------------------------------------------ one clip
 
-def read(path, duration, info=None):
-    """The telemetry of a clip, or None. info: the ffprobe result when it is already at hand."""
+def read(path, duration, info=None, files=None):
+    """The telemetry of a clip, or None. info: the ffprobe result when it is already at hand. files: raw telemetry of
+    the original when the clip itself is a stand-in without it, {"gpmd": GPMF samples back to back, "srt": DJI file}."""
     path = pathlib.Path(path)
+    files = files or {}
     if info is None:
         r = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
                            capture_output=True, text=True, encoding="utf-8", errors="replace")
         info = json.loads(r.stdout or "{}") if r.returncode == 0 else {}
     streams = info.get("streams") or []
     found = None
+    if files.get("gpmd"):
+        found = gopro(pathlib.Path(files["gpmd"]).read_bytes(), duration)
     gpmd = next((s for s in streams if s.get("codec_tag_string") == "gpmd"), None)
-    if gpmd is not None:
+    if found is None and gpmd is not None:
         r = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(path), "-map", f"0:{gpmd['index']}",
                             "-c", "copy", "-f", "data", "-"], capture_output=True)
         if r.returncode == 0 and r.stdout:
             found = gopro(r.stdout, duration)
     if found is None:
-        for side in (path.with_suffix(".SRT"), path.with_suffix(".srt")):
+        for side in ([pathlib.Path(files["srt"])] if files.get("srt") else []) + [path.with_suffix(".SRT"), path.with_suffix(".srt")]:
             if side.is_file() and side.stat().st_size < 50e6:
                 found = dji_srt(side.read_text(encoding="utf-8", errors="replace"))
                 break

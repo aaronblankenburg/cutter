@@ -544,6 +544,12 @@ def find_takes(clips, out, minutes=30, threshold=0.93):
     return groups
 
 
+def analysed_size(clip):
+    """The size of the picture that was measured: a stand-in's own, else the clip's."""
+    s = clip.get("standin") or {}
+    return (s.get("width"), s.get("height")) if s.get("width") else (clip.get("width"), clip.get("height"))
+
+
 def flag_low_detail(clips, out):
     """Sharpness is judged within a clip, so a clip that is soft from start to end goes unnoticed there. Compared
     with the other clips of the same size it stands out: summary.low_detail (it may also be fog, sky or water)."""
@@ -553,10 +559,10 @@ def flag_low_detail(clips, out):
     for c in clips:
         s = index.get(c["id"], {}).get("sharpness_mean")
         if s is not None:
-            by_size.setdefault((c.get("width"), c.get("height")), []).append(s)
+            by_size.setdefault(analysed_size(c), []).append(s)
     for c in clips:
         e = index.get(c["id"])
-        peers = by_size.get((c.get("width"), c.get("height")), [])
+        peers = by_size.get(analysed_size(c), [])
         if not e or e.get("sharpness_mean") is None:
             continue
         e.pop("low_detail", None)
@@ -771,7 +777,7 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
             except Exception as e:
                 log(f'    ! sound of {c["id"]}: {e}')
         try:
-            tele = telemetry.read(path, c["duration"])
+            tele = telemetry.read(path, c["duration"], files=c.get("telemetry_files"))
         except Exception as e:
             tele = None
             log(f'    ! telemetry of {c["id"]}: {e}')

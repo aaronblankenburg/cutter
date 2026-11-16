@@ -74,6 +74,7 @@ def c_analyze(a, out):
         raise CutterError("No footage given (cutter.toml → [media] or --media)", MISSING)
     target = pathlib.Path(a.output) if a.output else p.path("clips").parent
     with_proxies = (a.proxies or p["proxies"].get("make")) and not a.list
+    standins = p.path_of(p["standins"]["sidecars"]) if p["standins"].get("sidecars") else None
     if a.dry_run:
         return _dry(out, {"media": media, "output": str(target), "proxies": str(p.path("proxies")) if with_proxies else None},
                     f"  footage: {', '.join(media)}\n  output:  {target} (clips.json, transcripts/, sheets/, strips/, quality.txt)"
@@ -81,7 +82,7 @@ def c_analyze(a, out):
     r = analyze.run_analysis(media, target, list_only=a.list, since=a.since, until=a.until, exclude=a.exclude, only=a.only,
                              force=a.force, no_transcripts=a.no_transcripts, no_sheets=a.no_sheets, model=a.model,
                              language=a.language or p.get("language") or "auto", device=a.device, threads=a.threads, max_frames=a.max_frames,
-                             interval=a.interval, roots=p.media_roots())
+                             interval=a.interval, roots=p.media_roots(), standins=standins)
     made = table = None
     if not a.list:
         from . import proxies, timeline
