@@ -148,13 +148,21 @@ Reviewers comment on a moment or a range, pick a quick action (shorter, remove, 
 with an emoji. The agent's notes from `decisions.json` appear in violet at their places; its replies appear under
 each comment. When a new cut is published, the app opens it automatically.
 
+**Sending the feedback off:** when a reviewer is through, the button **Send feedback to <agent>** above the
+comments tells the agent that a round is complete. `cutter feedback wait` blocks until that happens, takes the
+request (the app then shows that the agent is working on it) and fetches the feedback of that cut. An agent leaves
+it running in the background after publishing a cut and starts the next cut when it returns. One request waits per
+cut; `--once` looks a single time, `--timeout` gives up after some seconds. With a review server it looks there
+over ssh (every 30 s; `--interval`).
+
 **Where the comments live:** in the project, `.cutter/review/data/feedback.sqlite` (local review app), or on the
 server (deployed app). `cutter feedback fetch` copies the comments of a cut to `.cutter/review/feedback-<cut>.json`
 in either case, so the project keeps the whole history.
 
 ## 9. Next cut
 
-1. `cutter feedback fetch` – the comments on the **newest** cut (older cuts do not count any more).
+1. `cutter feedback wait` (returns when a reviewer sent the feedback off, with the feedback fetched) or
+   `cutter feedback fetch` – the comments on the **newest** cut (older cuts do not count any more).
 2. `cutter plan cut2 --new` – `cuts/cut2/plan.py` from the template. Write each change as code, with a comment
    naming the person, the entry number and why. `cutter plan cut2` writes `cuts/cut2/edit.json`.
 3. `cuts/cut2/decisions.json` – one entry per change or decision, placed in the new cut, with references to the

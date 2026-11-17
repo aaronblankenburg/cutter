@@ -418,6 +418,14 @@ Next to it: `review.mp4` (at most 720p; shot numbers are burned into rough rende
               "status": "open", "reply": null, "created": "…", "changed": "…"}]}
 ```
 
+`cutter feedback wait` prints the same result as `fetch` plus the request it took, when a reviewer sent the
+feedback off with the button in the review app (`"request": null` when nothing was sent off):
+
+```json
+{"request": {"id": 3, "cut": "cut1", "person": "Alice", "created": "…", "taken": "…"},
+ "cut": "cut1", "file": "…/.cutter/review/feedback-cut1.json", "counts": {"total": 3, "open": 2, "done": 1, "rejected": 0}}
+```
+
 Actions: `remove`, `shorter`, `longer`, `cut_earlier`, `cut_later`, `other_shot`, `music_softer`, `music_louder`,
 `unclear`, `like`, `question`. Status: `open`, `done`, `rejected`.
 

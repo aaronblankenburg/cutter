@@ -34,6 +34,7 @@ This project is cut with **cutter**. The rules and the cut cycle are in the `vid
 {{CUTTER}} review password <name>        # the user types the password (only a hash is stored)
 {{CUTTER}} serve                         # review app in the home network (ask first)
 {{CUTTER}} feedback fetch                # comments on the newest cut -> .cutter/review/feedback-<cut>.json
+{{CUTTER}} feedback wait --json          # in the background: returns when a reviewer sends the feedback off
 {{CUTTER}} feedback reply cut2 --file replies.json
 ```
 

@@ -5,7 +5,8 @@ cutter review app – a small web service in which reviewers comment on cuts of 
 Python standard library only (3.9+). One service, everything behind Basic Auth:
   /                      frontend from static/
   /media/<cut>/<file>    review.mp4, timeline.json, thumbnails from data/cuts/<cut>/ (with HTTP range requests)
-  /api/...               JSON API, comments in SQLite (data/feedback.sqlite)
+  /api/...               JSON API, comments in SQLite (data/feedback.sqlite); /api/submit sends the feedback off:
+                         a request the agent waits for with "cutter feedback wait"
 
   python3 server.py --host 127.0.0.1 --port 8089 --data ../data --htpasswd ../htpasswd
 
@@ -88,6 +89,13 @@ CREATE TABLE IF NOT EXISTS entries (
     changed TEXT
 );
 CREATE INDEX IF NOT EXISTS entries_cut ON entries (cut, t);
+CREATE TABLE IF NOT EXISTS requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cut TEXT NOT NULL,
+    person TEXT NOT NULL,
+    created TEXT NOT NULL,
+    taken TEXT
+);
 """
 JSON_FIELDS = ("cutaway", "music", "edit_point")
 
@@ -499,6 +507,21 @@ class Store:
             self.counter += 1
         return n
 
+    # requests: a reviewer sent the feedback off; the agent takes a request with "cutter feedback wait"
+    def request(self, cut):
+        """The newest request for this cut (taken = when the agent picked it up), or None."""
+        with self.lock:
+            r = self.db.execute("SELECT * FROM requests WHERE cut = ? ORDER BY id DESC LIMIT 1", (cut,)).fetchone()
+        return {k: r[k] for k in r.keys()} if r else None
+
+    def new_request(self, cut, person):
+        """One waiting request per cut: sending again before the agent took it returns the waiting one."""
+        with self.lock:
+            r = self.db.execute("SELECT id FROM requests WHERE cut = ? AND taken IS NULL", (cut,)).fetchone()
+            if not r:
+                self.db.execute("INSERT INTO requests (cut, person, created) VALUES (?, ?, ?)", (cut, person, now()))
+        return self.request(cut), not r
+
     def count(self, cut):
         with self.lock:
             rows = self.db.execute("SELECT status, COUNT(*) FROM entries WHERE cut = ? GROUP BY status", (cut,)).fetchall()
@@ -833,9 +856,15 @@ class Handler(BaseHTTPRequestHandler):
                 f = arg("cut")
                 self.cut(f)
                 if arg("rev") == store.rev():
-                    return self.send_json({"rev": store.rev(), "unchanged": True})
+                    return self.send_json({"rev": store.rev(), "unchanged": True, "request": store.request(f)})
                 rev = store.rev()
-                return self.send_json({"rev": rev, "entries": store.list(f)})
+                return self.send_json({"rev": rev, "entries": store.list(f), "request": store.request(f)})
+
+            if path == "/api/submit" and m == "POST":
+                d = self.read_json()
+                self.cut(d.get("cut"))
+                request, new = store.new_request(d["cut"], self.person(d.get("person")))
+                return self.send_json({"request": request}, 201 if new else 200)
 
             if path == "/api/entries" and m == "POST":
                 d = self.read_json()

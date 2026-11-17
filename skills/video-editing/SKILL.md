@@ -61,13 +61,15 @@ cutter filmcraft build cut1 && cutter filmcraft export cut1
 cutter review-data cut1
 cutter review password <name> --generate --json   # makes the password; pass name and password on to the user
 cutter serve                                # ask first
+cutter feedback wait --json                 # in the background: returns when a reviewer sends the feedback off
 ```
 
 ## 4. Every further cut
 
-Follow [references/next-cut.md](references/next-cut.md): fetch the feedback on the newest cut, write
+Follow [references/next-cut.md](references/next-cut.md): wait for the reviewers to send their feedback off
+(`cutter feedback wait` in the background) or fetch the feedback on the newest cut, write
 `cuts/cut<n>/plan.py` (the changes as code) and `decisions.json` (why, at the right moment in the film), render,
-publish, and reply to every comment.
+publish, reply to every comment, and wait for the next round.
 
 ## 5. When something fails
 

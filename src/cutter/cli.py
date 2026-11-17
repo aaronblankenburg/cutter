@@ -457,6 +457,9 @@ def c_feedback(a, out):
     from . import feedback
     if a.fb_cmd == "fetch":
         r = feedback.fetch(p, cut=a.cut, local=a.local, data=a.data, output=a.output, status=a.status, env_file=a.env, dry_run=a.dry_run)
+    elif a.fb_cmd == "wait":
+        r = feedback.wait(p, local=a.local, data=a.data, env_file=a.env, interval=a.interval, timeout=a.timeout, once=a.once,
+                          dry_run=a.dry_run)
     else:
         r = feedback.reply(p, a.file, cut=a.cut, local=a.local, env_file=a.env, dry_run=a.dry_run, restart=not a.no_restart)
     out.result(r, r["text"])
@@ -655,10 +658,17 @@ def parser():
     p.add_argument("--port", type=int, help="port (default: CUTTER_REVIEW_PORT or 8089)")
     p.add_argument("--bind", help="address to listen on (default: all interfaces; 127.0.0.1 = only this computer)")
 
-    p = cmd("feedback", c_feedback, "read the comments on a cut; post the agent's replies")
+    p = cmd("feedback", c_feedback, "read the comments on a cut, wait for reviewers to send them off, post the agent's replies")
     fb = p.add_subparsers(dest="fb_cmd", required=True)
     q = fb.add_parser("fetch", help="copy the comments of the newest (or given) cut into .cutter/review/feedback-<cut>.json", parents=[common, dry])
     q.add_argument("cut", nargs="?"); q.add_argument("--status", choices=["open", "done", "rejected"]); q.add_argument("--output")
+    q.add_argument("--local", metavar="DB", help="read this SQLite file instead of the server")
+    q.add_argument("--data", help="with --local: folder with cuts/"); q.add_argument("--env")
+    q = fb.add_parser("wait", help="wait until a reviewer sends the feedback off in the review app, then fetch it",
+                      parents=[common, dry])
+    q.add_argument("--timeout", type=float, metavar="S", help="give up after S seconds (default: wait until a request arrives)")
+    q.add_argument("--interval", type=float, metavar="S", help="seconds between two looks (default: 3 locally, 30 on a server)")
+    q.add_argument("--once", action="store_true", help="look once and return")
     q.add_argument("--local", metavar="DB", help="read this SQLite file instead of the server")
     q.add_argument("--data", help="with --local: folder with cuts/"); q.add_argument("--env")
     q = fb.add_parser("reply", help="set status and replies (database backup first, service restart afterwards)", parents=[common, dry])

@@ -3,6 +3,8 @@
 fetch: reads the SQLite database (read-only) and writes the export of the newest (or given) cut as JSON into the
        project: .cutter/review/feedback-<cut>.json, so the project keeps the full history. Without deploy.env (or with
        --local) it reads the local database in .cutter/review/data/; with deploy.env it runs on the server over ssh.
+wait:  waits until a reviewer presses "Send feedback" in the review app, takes that request and fetches the
+       feedback of its cut, so that an agent can leave it running and start the next cut when it returns.
 reply: backs up the database first (data/backups/), sets status and reply, and restarts the service on a server so
        that the reviewers' apps load the changes.
 The same small script runs locally (python3 -) or on the server (ssh <host> python3 -). It works with the current
@@ -15,6 +17,7 @@ import pathlib
 import shlex
 import subprocess
 import sys
+import time
 
 from .legacy import feedback_from_legacy
 from .util import CutterError, MISSING, USAGE, read_json, write_json
@@ -35,7 +38,20 @@ new_app = hasattr(server, "Store")
 tables = {r[0] for r in sqlite3.connect("file:%s?mode=ro" % db, uri=True).execute("SELECT name FROM sqlite_master WHERE type='table'")}
 table = "entries" if "entries" in tables else "eintraege"
 cut_col = "cut" if table == "entries" else "fassung"
-if P["action"] == "fetch":
+if P["action"] == "claim":
+    # the oldest request nobody took yet; taking it is one UPDATE, so two waiting agents never get the same one
+    if "requests" not in tables:
+        print(json.dumps({"request": None})); sys.exit(0)
+    con = sqlite3.connect(db, timeout=30)
+    con.row_factory = sqlite3.Row
+    r = con.execute("SELECT * FROM requests WHERE taken IS NULL ORDER BY id LIMIT 1").fetchone()
+    if r is not None and not P.get("peek"):
+        stamp = dt.datetime.now().astimezone().isoformat(timespec="seconds")
+        with con:
+            if con.execute("UPDATE requests SET taken = ? WHERE id = ? AND taken IS NULL", (stamp, r["id"])).rowcount != 1:
+                r = None
+    print(json.dumps({"request": {k: r[k] for k in r.keys()} if r is not None else None}, ensure_ascii=False))
+elif P["action"] == "fetch":
     cuts = server.Cuts(data) if new_app else server.Fassungen(os.path.join(data, "fassungen"))
     names = cuts.names() if new_app else cuts.namen()
     f = P.get("cut") or (names[-1] if names else None)
@@ -159,3 +175,30 @@ def reply(p, file, cut=None, local=None, env_file=None, dry_run=False, restart=T
     if dry_run:
         return dict(d, count=len(items), text=f"Dry run: {len(items)} replies via {' '.join(d['command'])}; backup first, restart afterwards")
     return dict(d, text=f"{d['changed']} entries answered. Backup: {d['backup']}" + (f"; {d['restart']}" if d.get("restart") else ""))
+
+
+def wait(p, local=None, data=None, env_file=None, interval=None, timeout=None, once=False, dry_run=False):
+    """Block until a reviewer sent the feedback off; take the request and fetch the feedback of its cut."""
+    remote, param, _ = _target(p, local, data, env_file)
+    param.update(action="claim")
+    if interval is None:
+        interval = 30.0 if remote else 3.0     # every look at a server is an ssh connection
+    if dry_run:
+        d = _run(dict(param, peek=True), remote, True)
+        return dict(d, text=f"Dry run: {' '.join(d['command'])} every {interval:g} s until a request arrives")
+    end = time.monotonic() + timeout if timeout else None
+    while True:
+        try:
+            request = _run(param, remote).get("request")
+        except CutterError as e:
+            if e.code != MISSING or once:      # no database yet: the review app was never started – keep waiting
+                raise
+            request = None
+        if request or once or (end is not None and time.monotonic() >= end):
+            break
+        time.sleep(max(0.2, interval))
+    if not request:
+        return {"request": None, "text": "No feedback was sent off" + ("" if once else f" within {timeout:g} s")}
+    d = fetch(p, cut=request["cut"], local=local, data=data, env_file=env_file)
+    return dict(d, request=request,
+                text=f"{request['person']} sent the feedback on {request['cut']} off ({request['created']}).\n{d['text']}")

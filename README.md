@@ -252,7 +252,7 @@ If the tags say nothing, the agent asks you instead of guessing.
 | `cutter review-data <cut>` | Prepare a cut for the review app |
 | `cutter review password <name>` | Add a reviewer or change their password; `--generate` makes one and prints it once, `--delete` removes the reviewer |
 | `cutter serve` | Run the review app |
-| `cutter feedback fetch` / `reply` | Read the comments; post the agent's replies |
+| `cutter feedback fetch` / `wait` / `reply` | Read the comments; wait until a reviewer sends them off; post the agent's replies |
 | `cutter deploy` | Publish the review app on a server (SSH, settings in `deploy.env`) |
 | `cutter agent setup [--claude] [--codex]` | Link the skill into Claude Code and/or Codex |
 | `cutter migrate <file>` | Convert files from earlier versions of the pipeline |

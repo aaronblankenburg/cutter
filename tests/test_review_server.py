@@ -121,6 +121,28 @@ class ReviewServer(unittest.TestCase):
         r, body = self.req("GET", "/api/export?cut=cut1&format=md")
         self.assertIn("Too long here", body.decode())
 
+    def test_sending_the_feedback_off_makes_one_request(self):
+        r, body = self.req("GET", "/api/entries?cut=cut1")
+        self.assertIsNone(json.loads(body)["request"])
+        r, body = self.req("POST", "/api/submit", {"cut": "cut9", "person": "Reviewer A"})
+        self.assertEqual(r.status, 404, "only for a cut that exists")
+        r, body = self.req("POST", "/api/submit", {"cut": "cut1"})
+        self.assertEqual(r.status, 400, "a name is needed")
+        r, body = self.req("POST", "/api/submit", {"cut": "cut1", "person": "Reviewer A"})
+        self.assertEqual(r.status, 201, body)
+        first = json.loads(body)["request"]
+        self.assertEqual((first["cut"], first["person"], first["taken"]), ("cut1", "Reviewer A", None))
+        r, body = self.req("POST", "/api/submit", {"cut": "cut1", "person": "Reviewer B"})
+        self.assertEqual(r.status, 200, "a request that still waits is not doubled")
+        self.assertEqual(json.loads(body)["request"]["id"], first["id"])
+        r, body = self.req("GET", "/api/entries?cut=cut1")
+        d = json.loads(body)
+        self.assertEqual(d["request"]["id"], first["id"])
+        r, body = self.req("GET", f"/api/entries?cut=cut1&rev={d['rev']}")
+        d = json.loads(body)
+        self.assertTrue(d["unchanged"])
+        self.assertEqual(d["request"]["id"], first["id"], "the request is reported even when no comment changed")
+
 
 class PasswordRequired(unittest.TestCase):
     def test_server_without_users_answers_503(self):

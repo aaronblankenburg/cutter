@@ -59,6 +59,45 @@ class Feedback(unittest.TestCase):
             r = run_cutter("feedback", "reply", "--file", bad, cwd=d, check=False)
             self.assertEqual(r.returncode, 3)
 
+    def test_wait_takes_a_request_and_fetches_its_feedback(self):
+        with TempDir() as d:
+            (d / "cutter.toml").write_text('title = "Fb"\n', encoding="utf-8")
+            data = d / ".cutter" / "review" / "data"
+            r = run_cutter("feedback", "wait", "--once", "--json", cwd=d, check=False)
+            self.assertEqual(r.returncode, 3, "no review database yet")
+            make_cut(data, "cut1")
+            make_cut(data, "cut2")
+            password, htpasswd = make_htpasswd(d / ".cutter" / "review", "tester")
+            port = free_port()
+            proc = start(data, htpasswd, port)
+            try:
+                post_comment(port, password, cut="cut1", t=2.0, action="shorter", text="Too long", person="Reviewer A")
+                self.assertIsNone(json.loads(run_cutter("feedback", "wait", "--once", "--json", cwd=d).stdout)["request"])
+                out = json.loads(run_cutter("feedback", "wait", "--timeout", "0.5", "--interval", "0.2", "--json", cwd=d).stdout)
+                self.assertIsNone(out["request"], "nothing sent off: the wait ends at its timeout")
+                c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+                c.request("POST", "/api/submit", body=json.dumps({"cut": "cut1", "person": "Reviewer A"}).encode(),
+                          headers={"Authorization": basic_auth("tester", password), "Content-Type": "application/json"})
+                self.assertEqual(c.getresponse().status, 201)
+                c.close()
+                out = json.loads(run_cutter("feedback", "wait", "--dry-run", "--json", cwd=d).stdout)
+                self.assertTrue(out["dry_run"])
+                out = json.loads(run_cutter("feedback", "wait", "--timeout", "20", "--interval", "0.2", "--json", cwd=d).stdout)
+                self.assertEqual((out["request"]["cut"], out["request"]["person"]), ("cut1", "Reviewer A"))
+                self.assertEqual(out["cut"], "cut1", "the feedback of the cut that was sent off, not of the newest")
+                self.assertEqual(out["counts"]["open"], 1)
+                self.assertEqual(json.loads((d / ".cutter" / "review" / "feedback-cut1.json").read_text())["counts"]["total"], 1)
+                self.assertIsNone(json.loads(run_cutter("feedback", "wait", "--once", "--json", cwd=d).stdout)["request"],
+                                  "a request is taken only once")
+                c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+                c.request("GET", "/api/entries?cut=cut1", headers={"Authorization": basic_auth("tester", password)})
+                self.assertTrue(json.loads(c.getresponse().read())["request"]["taken"], "the app shows that the agent took it")
+                c.close()
+            finally:
+                proc.terminate()
+                proc.wait(timeout=10)
+                proc.stdout.close()
+
     def test_reply_rejects_entries_of_another_cut(self):
         with TempDir() as d:
             (d / "cutter.toml").write_text("", encoding="utf-8")

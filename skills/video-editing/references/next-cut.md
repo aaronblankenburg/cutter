@@ -3,7 +3,23 @@
 Reviewers comment on the newest cut in the review app. Each further cut applies their feedback, explains every
 change at the spot in the film where it happens, and answers every comment.
 
+## 0. Wait for the feedback
+
+Reviewers end their round with the button **Send feedback to <agent>** in the review app. As soon as a cut is
+published, wait for that in the background and tell the user that you do:
+
+```sh
+cutter feedback wait --json      # blocks until a reviewer sends the feedback off, then fetches it
+```
+
+Run it as a background job (no timeout), so you are called when it returns. Its result names the `request` (who,
+which `cut`) and the fetched `file` (`.cutter/review/feedback-<cut>.json`): go on with step 2. In the app the
+reviewers see that you picked the feedback up. When the new cut is published and every comment is answered, start
+`cutter feedback wait` again; stop when the user accepts the film. `--once` looks a single time.
+
 ## 1. Fetch
+
+Without the button (the user tells you there is feedback), fetch it yourself:
 
 ```sh
 cutter feedback fetch            # newest cut -> .cutter/review/feedback-<cut>.json
@@ -63,3 +79,5 @@ cutter feedback reply cut2 --file replies.json   # backs up the database first
 ```
 
 A rejected comment always gets a reason. Replies are short and say where to look in the new cut.
+
+Then wait for the next round (step 0).

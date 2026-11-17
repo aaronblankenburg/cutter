@@ -227,6 +227,7 @@
         action: () => { sel.value = remembered; loadCut(remembered); } });
     }
     if (!S.name) await askName();
+    $('#send-button').addEventListener('click', sendFeedback);
     setInterval(() => { if (!document.hidden) fetchEntries(); }, 2500);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) fetchEntries(); });
   }
@@ -259,7 +260,8 @@
       fetch(vttUrl, { cache: 'no-cache' }).then((r) => r.text()).then((x) => { if (S.f === id) S.thumbs = parseVtt(x, vttUrl); })
         .catch(() => {});
     }
-    S.rev = null; S.firstLoad = true; S.entries = [];
+    S.rev = null; S.firstLoad = true; S.entries = []; S.request = undefined;
+    showRequest(null, true);
     personFilter(); list();
     showRange();
     await fetchEntries();
@@ -273,13 +275,40 @@
     try {
       const r = await api('GET', `api/entries?cut=${encodeURIComponent(f)}&rev=${encodeURIComponent(S.rev || '')}`);
       connection(true);
-      if (f !== S.f || r.unchanged) return;
+      if (f !== S.f) return;
+      showRequest(r.request || null);
+      if (r.unchanged) return;
       if (!S.firstLoad) news(S.entries, r.entries);
       S.firstLoad = false; S.entries = r.entries; S.rev = r.rev;
       personFilter(); list(); info(); draw();
     } catch (e) {
       connection(false);
     } finally { S.polling = false; }
+  }
+
+  // "Send feedback": a reviewer says the feedback is complete; the agent waits for that (cutter feedback wait),
+  // takes the request and starts the next cut. One request waits per cut; "taken" is when the agent picked it up.
+  const clock = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+  function showRequest(r, quiet) {
+    const before = S.request;
+    S.request = r;
+    const waiting = !!r && !r.taken, b = $('#send-button'), st = $('#send-status');
+    b.textContent = t('send_button', { agent: AGENT });
+    b.disabled = waiting;
+    st.classList.toggle('working', !!r && !!r.taken);
+    st.textContent = !r ? '' : waiting ? t('send_waiting', { person: r.person, t: clock(r.created), agent: AGENT })
+      : t('send_taken', { agent: AGENT, t: clock(r.taken) });
+    if (!quiet && before && r && before.id === r.id && !before.taken && r.taken) message(t('send_taken_now', { agent: AGENT }));
+  }
+  async function sendFeedback() {
+    if (!S.f || (!S.name && !(await askName()))) return;
+    const n = S.entries.filter((e) => e.status === 'open').length;
+    if (!window.confirm(t(n ? 'send_confirm' : 'send_confirm_none', { agent: AGENT, cut: S.f, n }))) return;
+    try {
+      const r = await api('POST', 'api/submit', { cut: S.f, person: S.name });
+      showRequest(r.request, true);
+      message(t('send_done', { agent: AGENT }));
+    } catch (e) { message(t('send_failed', { msg: e.message }), { error: true }); }
   }
 
   function news(old, fresh) {
