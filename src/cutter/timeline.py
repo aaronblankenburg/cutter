@@ -48,6 +48,15 @@ def probe_size(path):
         return None
 
 
+def probe_has_audio(path):
+    """True if the file has an audio stream (False if it cannot be read)."""
+    if not shutil.which("ffprobe") or not pathlib.Path(path).exists():
+        return False
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0",
+                        str(path)], capture_output=True, text=True)
+    return bool(r.stdout.strip())
+
+
 def probe_duration(path):
     if not shutil.which("ffprobe") or not pathlib.Path(path).exists():
         return None

@@ -100,6 +100,9 @@ def build_model(p, cut, target, relink=None):
 
     def footage(cid):
         c = clips[cid]
+        if not c.get("rel_path"):                      # an external clip (map animation, black): in the package
+            return package_file(c["path"], "maps", "clip", c.get("width"), c.get("height"), seconds=c.get("duration"),
+                                has_audio=timeline.probe_has_audio(c["path"]))
         if cid not in model["files"]:
             src_fps, src_base, src_ntsc = rate(c.get("fps_raw") or c.get("fps") or 25)
             rel = relink.get(c["rel_path"], c["rel_path"])
@@ -112,7 +115,7 @@ def build_model(p, cut, target, relink=None):
                 "sample_rate": c.get("audio_rate") or 48000, "kind": "footage"}
         return model["files"][cid]
 
-    def package_file(src, folder, kind, width=None, height=None, seconds=None):
+    def package_file(src, folder, kind, width=None, height=None, seconds=None, has_audio=None):
         src = pathlib.Path(src)
         name = src.name
         key = f"{folder}/{name}"
@@ -122,7 +125,8 @@ def build_model(p, cut, target, relink=None):
                                    "native": paths.join(targ, key, under_package=True), "timebase": timebase,
                                    "ntsc": ntsc, "duration": frames(seconds) if seconds else None, "timecode": None,
                                    "width": width, "height": height, "has_video": kind != "audio",
-                                   "has_audio": kind == "audio", "channels": 2, "sample_rate": 48000, "kind": kind}
+                                   "has_audio": kind == "audio" if has_audio is None else has_audio, "channels": 2,
+                                   "sample_rate": 48000, "kind": kind}
         return model["files"][key]
 
     # --- tracks from the OTIO timeline (the same frames FilmCraft and the review get)

@@ -1,5 +1,7 @@
 """Packages for other editors (export.py, fcp7.py, titles.py): media references, original metadata, keyframes."""
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -131,6 +133,34 @@ class Premiere(unittest.TestCase):
         with self.assertRaises((CutterError, SystemExit)):
             golden_demo.cli("export", "cut1", "--project", self.film, "--target-os", "windows", "--target-root", "/x",
                             "--out", self.film / "pkg2")
+
+
+@unittest.skipUnless(TOOLS and shutil.which("ffmpeg"), "needs the tool packages (Docker image) and ffmpeg")
+class ExternalClips(unittest.TestCase):
+    """A shot from a clip outside clips.json (a map animation the agent rendered) goes into the package."""
+
+    def test_external_clip_is_packaged(self):
+        with tempfile.TemporaryDirectory(prefix="cutter_export_ext_") as d:
+            film = golden_demo.setup_project(d)
+            golden_demo.run_pipeline(film)
+            anim = film / "maps" / "route_day1.mp4"
+            anim.parent.mkdir(exist_ok=True)
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=blue:s=1920x1080:r=25:d=4",
+                            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(anim)], check=True)
+            edit_p = film / "cuts/cut1/edit.json"
+            edit = json.loads(edit_p.read_text())
+            shot = edit["sections"][0]["shots"][0]
+            shot.update(clip="E1", **{"in": 0.0, "out": 4.0})
+            edit["external_clips"] = {"E1": {"file": str(anim), "duration": 4.0, "fps": 25}}
+            edit_p.write_text(json.dumps(edit, ensure_ascii=False))
+            for to, os_, root in (("premiere", "windows", "D:\\Videos\\Demo"), ("fcp", "macos", "/Volumes/Demo")):
+                r = golden_demo.cli("export", "cut1", "--project", film, "--to", to, "--target-os", os_,
+                                    "--target-root", root, "--out", film / f"pkg-{to}")
+                self.assertIn("maps/route_day1.mp4", r["files"], to)
+                self.assertTrue((film / f"pkg-{to}" / "maps/route_day1.mp4").exists(), to)
+                self.assertNotIn(str(anim), " ".join(r["clips"]), to)
+                text = (film / f"pkg-{to}" / r["timeline"]).read_text()
+                self.assertIn("_cutlery/maps/route_day1.mp4", text, to)
 
 
 if __name__ == "__main__":
