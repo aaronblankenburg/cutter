@@ -93,6 +93,9 @@ DEFAULTS = {
         "agent": "Claude",
         "url": "",
         "ui_language": "",
+        "person": "",           # an app that embeds the review frontend: the fixed reviewer name
+        "submit": True,         # false: no "Send feedback" box
+        "embedded": False,      # true: inside another app's page (no brand, full width, same-origin frames)
     },
     "standins": {
         "sidecars": "",         # folder with the sidecars of the stand-in files in [media] (see standin.py)
@@ -259,8 +262,15 @@ class Project:
     def app_config(self):
         """Settings for the review app (data/project.json)."""
         r = self.c["review"]
-        return {"title": r.get("title") or self.c.get("title") or "", "people": r.get("people") or [],
-                "agent": r.get("agent") or "Claude", "ui_language": self.ui_language()}
+        d = {"title": r.get("title") or self.c.get("title") or "", "people": r.get("people") or [],
+             "agent": r.get("agent") or "Claude", "ui_language": self.ui_language()}
+        if r.get("person"):
+            d["person"] = str(r["person"])
+        if r.get("submit") is False:
+            d["submit"] = False
+        if r.get("embedded") is True:
+            d["embedded"] = True
+        return d
 
     def cuts(self):
         """Names of the cuts that have a folder under cuts/, naturally sorted."""

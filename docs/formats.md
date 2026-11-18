@@ -33,6 +33,9 @@ fade_out_s = { M3 = 3.0 }       # fade-out per cue (a cue's own fade_out_s in ed
 people = [{ name = "Alice", color = "#38bdf8" }]
 agent = "Claude"                # name shown at the agent's notes and replies
 url = ""                        # address of a deployed review app
+# for an app that embeds the review frontend (written to data/project.json, see the review app below):
+# person = "Alice"              the fixed reviewer name     submit = false   no "Send feedback" box
+# embedded = true               no brand, full width, frames of the same origin, messages to the parent page
 
 [timeline]
 otio_namespace = "cutter"       # key of cutter's metadata in OTIO items
