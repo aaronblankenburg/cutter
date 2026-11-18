@@ -13,6 +13,8 @@ answer a question, so never ask one and never wait for an answer.
   audience, target length, style, music wishes, no-gos and people who must not appear, plus the files the user gave
   (storyboard, images, music with their licences). It is written in the user's language; write your decisions and
   replies in that language.
+- **The user's selection** (`selects.json`, also summarised in briefing.md): favourites to use where they fit,
+  rejects to leave out (first-cut.md, “The story”).
 - **Decide missing points yourself** and record every assumption in the cut's `decisions.json` as an entry with
   `"kind": "assumption"`: a short `title`, `text` (what you assumed) and `why`. The review shows them, so the user
   can correct you in the next cut. Examples: target length not given, style unclear, which take of two to use.

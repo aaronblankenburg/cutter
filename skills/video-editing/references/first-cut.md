@@ -53,6 +53,10 @@ Then look for yourself:
 - Dialogue scenes first; B-roll is chosen to fit around them.
 - Plan for the target length; a first cut may run 10–20 % long, the reviewers will shorten it.
 - Leave out everything on the no-go list, also in the background of other shots.
+- **The user's own selection:** if the project folder has `selects.json` (format:
+  [docs/formats.md](../../../docs/formats.md#selectsjson)), the user viewed the footage and marked favourites and
+  rejects (whole clips or ranges, maybe with a note). Use the favourites where they fit the story; leave the rejects
+  out. Where you do not follow the selection, say why in decisions.json.
 
 ## 4. Music: license first, then beats
 

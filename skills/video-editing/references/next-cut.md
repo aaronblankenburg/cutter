@@ -34,6 +34,8 @@ shot number (`nr`), action (shorter, remove, other_shot, music_softer, question,
   `id` of the previous cut's `alternatives.json`. `<n>` means: use option n of that place (its `clip`, `in`, `out`)
   instead of what is there, fitted to the place (length, beat); `keep` means the reviewer saw the options and wants
   the cut as it is. Apply them exactly and say so in the reply.
+- **The selection** (`selects.json`, see first-cut.md, “The story”) may have changed since the last cut: new
+  favourites are wishes like comments, new rejects come out. Say in the replies or in decisions.json what you did.
 - **Colour switches** carry `"color": "<nr>/off"`, `"<nr>/on"`, `"all/off"` or `"all/on"`: the reviewer switched the
   suggested colour correction off or on for a shot or the whole film. Nothing to do for them: cutter carries them
   over to the new cut by `nr_previous` (so keep `nr_previous` right). A comment in words about colour ("too blue",

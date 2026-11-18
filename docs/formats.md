@@ -367,6 +367,21 @@ the proxy of the clip if there is one, else from the clip; unchanged options are
 A reviewer's choice is a comment with `"alternative": "<id>/<n>"` (use option n instead) or `"<id>/keep"` (keep the
 cut as it is), see the [feedback export](#feedback-export); the next cut applies it.
 
+## selects.json
+
+The user's own selection from viewing the footage (written by a tool such as Cutlery, read by the video-editing
+skill): favourites to use where they fit, rejects to leave out.
+
+```json
+{"version": 1, "selects": [
+  {"id": "s1", "clip": "C005", "file": "2012-07-14 09-26-28 DSC_0669.MOV", "kind": "favorite",
+   "in": 3.2, "out": 8.0, "note": "the sunrise", "created": "2026-11-19T08:12:00+01:00"},
+  {"id": "s2", "clip": "C017", "file": "GOPR0175.MP4", "kind": "reject", "in": null, "out": null, "note": ""}]}
+```
+
+`clip`: ID in clips.json (`file` for people reading it); `kind`: `favorite` or `reject`; `in`/`out`: seconds in the
+clip, both null for the whole clip; `note`: free text (the user's language).
+
 ## plan.py
 
 `cuts/<cut>/plan.py` turns the previous cut's edit list into this cut's: `cutter plan cut3` runs
