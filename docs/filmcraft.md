@@ -29,7 +29,8 @@ cutter filmcraft export cut3     # -> exports/cut3.mp4, subtitles burned in
 
 `export` renders the sequence with the export preset (`Match Source – Adaptive Low Bitrate` by default,
 `--preset` or `[filmcraft] export_preset`) and always burns the subtitles in (`burnCaptions`). `--start`/`--end`
-export an excerpt. User presets are kept in `.cutter/filmcraft-data/` of the project.
+export an excerpt. `[filmcraft] export_height` (for example 360 when the clips are 360p stand-ins) exports at that
+height (`--scale`) instead of the sequence's 1080 lines, which renders much faster. User presets are kept in `.cutter/filmcraft-data/` of the project.
 
 **Measured** with FilmCraft 0.19.0 in the image on a 12th-gen Intel Core i5 laptop CPU (16 threads), 1080p25:
 the demo (test patterns, titles, subtitles) exports at about 25 frames per second; a real travel film renders at

@@ -1,7 +1,7 @@
 """Review data: prepares one cut for the review app.
 
 Writes to <review data>/cuts/<CUT>/:
-  review.mp4                 720p, 25 fps, H.264/AAC (at most 2.5 Mbit/s), keyframe every 2 s, faststart
+  review.mp4                 at most 720p (an export of 720 lines or fewer keeps its size), 25 fps, H.264/AAC (at most 2.5 Mbit/s), keyframe every 2 s, faststart
   thumbs_NN.jpg, thumbs.vtt  thumbnails every 2 s as sprites with WebVTT (#xywh=...)
   poster.jpg                 still frame shown before the video loads
   timeline.json              shots (nr, start, end, clip, section, kind, note, spoken text), cuts, sections, music,
@@ -9,9 +9,10 @@ Writes to <review data>/cuts/<CUT>/:
                              written last
 
 Video:
-  video=<file.mp4>   FilmCraft export (720p25 is only remuxed, anything else is converted to 720p25)
-  without video      rough review render from the timeline: no titles or transitions, with music, small shot
-                     number in the top left corner (numbers=False turns it off)
+  video=<file.mp4>   FilmCraft export (H.264 at 25 fps up to 720 lines is only remuxed; anything else is converted to
+                     25 fps at its own size up to 720 lines, larger exports to 720p)
+  without video      rough review render from the timeline (720p, or height=…, e.g. 360 for stand-ins): no titles
+                     or transitions, with music, small shot number in the top left corner (numbers=False turns it off)
 
 Times come from the OTIO (rounded to 25 fps, as in FilmCraft), metadata from edit.json, spoken text from the
 transcripts (<transcripts>/<clip>.json). Legacy (German-keyed) edit lists, decisions and OTIO metadata are read
@@ -273,17 +274,28 @@ def without_internal(obj):
 
 # ---------------------------------------------------------------- video
 
-def drawtext(text, large=False):
+def drawtext(text, large=False, k=1.0):
+    """k: size relative to a 720-line frame."""
     font = f"fontfile={FONT}:" if FONT else ""
     text = text.replace("\\", "").replace("'", "").replace(":", " ").replace("%", "")
+    z = lambda v: max(1, round(v * k))
     if large:
-        return (f"drawtext={font}text='{text}':x=(w-tw)/2:y=(h-th)/2:fontsize=30:fontcolor=white@0.55")
-    return (f"drawtext={font}text='{text}':x=14:y=12:fontsize=26:fontcolor=white:"
-            f"box=1:boxcolor=black@0.5:boxborderw=6")
+        return (f"drawtext={font}text='{text}':x=(w-tw)/2:y=(h-th)/2:fontsize={z(30)}:fontcolor=white@0.55")
+    return (f"drawtext={font}text='{text}':x={z(14)}:y={z(12)}:fontsize={z(26)}:fontcolor=white:"
+            f"box=1:boxcolor=black@0.5:boxborderw={z(6)}")
 
 
-def rough_video(tl, tmp, numbers, jobs):
+def frame_size(height=None):
+    """Width and height of a 16:9 review render: 1280x720, or smaller (even numbers) for height < 720."""
+    if not height or height >= H:
+        return W, H
+    h = max(2, int(height) // 2 * 2)
+    return (h * 16 // 9 + 1) // 2 * 2, h
+
+
+def rough_video(tl, tmp, numbers, jobs, size=(W, H)):
     """Picture track without sound: every shot (and every cutaway) as its own piece, then concatenated."""
+    w, h = size
     pieces = []        # (frame_from, frame_to, path|None, source_time_at_frame_from, label, hint)
     for s in tl["shots"]:
         f0, f1 = round(s["start"] * FPS), round(s["end"] * FPS)
@@ -316,15 +328,15 @@ def rough_video(tl, tmp, numbers, jobs):
         vf = []
         if path:
             inp = ["-ss", f"{max(0.0, qz):.3f}", "-i", path]
-            vf += [f"scale={W}:{H}:force_original_aspect_ratio=increase", f"crop={W}:{H}", f"fps={FPS}", "setsar=1",
+            vf += [f"scale={w}:{h}:force_original_aspect_ratio=increase", f"crop={w}:{h}", f"fps={FPS}", "setsar=1",
                    "tpad=stop_mode=clone:stop_duration=2"]
         else:
-            inp = ["-f", "lavfi", "-i", f"color=c=black:s={W}x{H}:r={FPS}"]
+            inp = ["-f", "lavfi", "-i", f"color=c=black:s={w}x{h}:r={FPS}"]
             if hw:
-                vf.append(drawtext(hw, large=True))
+                vf.append(drawtext(hw, large=True, k=h / H))
         vf.append("format=yuv420p")
         if numbers:
-            vf.append(drawtext(lab))
+            vf.append(drawtext(lab, k=h / H))
         return out, ["ffmpeg", "-nostdin", "-v", "error", "-y", *inp, "-frames:v", p1 - p0, "-vf", ",".join(vf), "-an",
                      "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-maxrate", "2500k", "-bufsize", "5000k",
                      "-g", 2 * FPS, "-r", FPS, "-video_track_timescale", 12800, "-threads", 2, out]
@@ -426,8 +438,8 @@ def rough_audio(tl, external=("TXT",), levels=None):
     return mix.astype("<f4").tobytes()
 
 
-def rough_render(tl, target, tmp, numbers, jobs, external=("TXT",), levels=None):
-    picture = rough_video(tl, tmp, numbers, jobs)
+def rough_render(tl, target, tmp, numbers, jobs, external=("TXT",), levels=None, size=(W, H)):
+    picture = rough_video(tl, tmp, numbers, jobs, size)
     log("  Mixing audio …")
     audio = rough_audio(tl, external, levels)
     log("  Joining picture and sound …")
@@ -451,21 +463,25 @@ def numbers_ass(tl, path):
 
 
 def export_video(source, tl, target, tmp, numbers):
-    """Take over a FilmCraft export: 720p25 H.264 is only remuxed, anything else is converted."""
+    """Take over a FilmCraft export: H.264 at 25 fps up to 720 lines is only remuxed, anything else is converted (to
+    720p, or at its own size if that is smaller: a 360-line export of stand-ins is not scaled up)."""
     p = probe(source)
     if abs(p["duration"] - tl["duration"]) > 0.5:
         log(f"  Warning: video {p['duration']:.2f} s, timeline {tl['duration']:.2f} s – does the export match the version?")
     if not numbers and p["codec"] == "h264" and (p["height"] or 0) <= 720 and abs(p["fps"] - FPS) < 0.01 and p["audio"]:
-        log("  Export is already 720p25 H.264 – only remuxing (faststart)")
+        log(f"  Export is already {p['height']}p25 H.264 – only remuxing (faststart)")
         run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", source, "-map", "0:v:0", "-map", "0:a:0", "-c", "copy",
              "-movflags", "+faststart", target])
         return
-    vf = [f"scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos", f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2",
+    w, h = (W, H)
+    if p["width"] and p["height"] and p["height"] < H and p["width"] <= W:
+        w, h = p["width"] // 2 * 2, p["height"] // 2 * 2
+    vf = [f"scale={w}:{h}:force_original_aspect_ratio=decrease:flags=lanczos", f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
           f"fps={FPS}", "setsar=1", "format=yuv420p"]
     if numbers:
         numbers_ass(tl, tmp / "nr.ass")
         vf.append(f"ass={tmp / 'nr.ass'}")
-    log(f"  Export {p['width']}x{p['height']} {p['fps']:.3g} fps is converted to {W}x{H} {FPS} fps …")
+    log(f"  Export {p['width']}x{p['height']} {p['fps']:.3g} fps is converted to {w}x{h} {FPS} fps …")
     run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", source, "-map", "0:v:0", "-map", "0:a:0?", "-vf", ",".join(vf),
          "-c:v", "libx264", "-preset", "medium", "-crf", "26", "-maxrate", "2500k", "-bufsize", "5000k",
          "-g", 2 * FPS, "-keyint_min", FPS,
@@ -500,8 +516,10 @@ def thumbnails(video, folder, duration):
 
 
 def create(version, edit_path, otio_path, target, transcripts, video=None, decisions_path=None, numbers_in_export=False,
-           no_numbers=False, timeline_only=False, jobs=None, ns="cutter", external=("TXT",), fade_out=None, levels=None):
-    """Write the review data of one version. decisions_path: changes and decisions (None = none). Returns a report."""
+           no_numbers=False, timeline_only=False, jobs=None, ns="cutter", external=("TXT",), fade_out=None, levels=None,
+           height=None):
+    """Write the review data of one version. decisions_path: changes and decisions (None = none). height: lines of a
+    rough render below 720 (e.g. 360 when the clips are 360p stand-ins). Returns a report."""
     if not VERSION_RE.fullmatch(version):
         raise CutterError("Cut names use letters, digits, - and _ (for example cut4)", 2)
     edit_path, otio_path, target = pathlib.Path(edit_path), pathlib.Path(otio_path), pathlib.Path(target)
@@ -547,7 +565,7 @@ def create(version, edit_path, otio_path, target, transcripts, video=None, decis
                 export_video(pathlib.Path(video), tl, new, tmp, numbers)
             else:
                 log("Rough review render from the timeline (no titles or transitions, with music):")
-                rough_render(tl, new, tmp, numbers, jobs, external, levels)
+                rough_render(tl, new, tmp, numbers, jobs, external, levels, frame_size(height))
             between = folder / "review.mp4.new"           # copy next to it first, then replace atomically
             shutil.copyfile(new, between)
             os.replace(between, video_target)

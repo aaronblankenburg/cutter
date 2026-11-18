@@ -74,6 +74,9 @@ height = 720                    # of the proxies (default: 720)
 [filmcraft]
 config = "filmcraft.json"       # titles, credits, map, captions … (see below)
 export_preset = "Match Source – Adaptive Low Bitrate"
+export_height = 360             # export at 360 lines (--scale 1/3 of the 1080-line sequence) instead of the preset's
+                                # size; for stand-ins of that size, faster to render (default: 0 = the preset's size).
+                                # cutter review-data then keeps the size, and a rough render uses it too
 
 [paths]                         # where files go; {cut} becomes the cut name. The defaults:
 # clips = "analysis/clips.json"   transcripts = "analysis/transcripts"   music_analysis = "music/music.json"
@@ -401,7 +404,7 @@ Optional; named by `[filmcraft] config` in cutter.toml. All keys are optional an
  "source": {"edit", "otio", "video", "video_kind", "decisions"}, "created": "…"}
 ```
 
-Next to it: `review.mp4` (at most 720p; shot numbers are burned into rough renders), `thumbs_NN.jpg` with `thumbs.vtt`, and
+Next to it: `review.mp4` (at most 720p; an export of 720 lines or fewer keeps its size; shot numbers are burned into rough renders), `thumbs_NN.jpg` with `thumbs.vtt`, and
 `poster.jpg`. `data/project.json` holds the title, reviewers, the agent's name and the UI language.
 
 ## Feedback export

@@ -301,9 +301,10 @@ def c_filmcraft(a, out):
         target = pathlib.Path(a.output) if a.output else p.path("exports") / f"{cut}.mp4"
         preset = a.preset or fc["export"].get("preset") or p["filmcraft"].get("export_preset")
         settings = dict(fc["export"].get("settings") or {}, burnCaptions=True)       # subtitles are always burned in
+        extra = export_scale(p["filmcraft"].get("export_height"))
         if a.dry_run:
             cmd = ["filmcraft-cli", "--project", str(project_file), "export", str(target), "--preset", preset, "--settings",
-                   json.dumps(settings)] + (["--start", str(a.start), "--end", str(a.end)] if a.start is not None else [])
+                   json.dumps(settings)] + (["--start", str(a.start), "--end", str(a.end)] if a.start is not None else []) + extra
             return _dry(out, {"command": cmd}, "  " + " ".join(cmd))
         if bridge is None and not project_file.exists():
             raise CutterError(f"FilmCraft project of the cut missing: {project_file}", MISSING, f"First: cutter filmcraft build {cut}")
@@ -312,10 +313,11 @@ def c_filmcraft(a, out):
         if bridge is None:
             cl.saved, cl.target = True, project_file
         t0 = time.time()
-        res = cl.export(target, preset, settings, a.start, a.end)
+        res = cl.export(target, preset, settings, a.start, a.end, extra)
         built = p.path("work", cut) / "filmcraft_media.json"
         media = read_json(built)["media"] if built.exists() else _timeline_media(p, cut)
-        r = {"output": str(target), "seconds": round(time.time() - t0, 1), "settings": settings, "result": res, "media": media}
+        r = {"output": str(target), "seconds": round(time.time() - t0, 1), "settings": settings, "result": res, "media": media,
+             "scale": float(extra[1]) if extra else None}
         draft = ("\nThis is a draft from the proxies. For the final film: cutter timeline " + cut + ", cutter filmcraft build "
                  + cut + " --overwrite, then export again") if media == "proxies" else ""
         return out.result(r, f"Exported: {target} ({r['seconds']} s, subtitles burned in)" + draft)
@@ -331,6 +333,17 @@ def c_map(a, out):
     base = pathlib.Path(a.config).resolve().parent
     r = maps.overview(cfg, base) if a.map_cmd == "overview" else maps.route(cfg, base)
     out.result(r, r["text"])
+
+
+def export_scale(height):
+    """filmcraft-cli arguments for [filmcraft] export_height: the sequence is 1080 lines, so 360 is --scale 0.3333."""
+    try:
+        h = int(height or 0)
+    except (TypeError, ValueError):
+        raise CutterError(f"[filmcraft] export_height: whole number of lines expected, not {height!r}", USAGE)
+    if h <= 0 or h >= 1080:
+        return []
+    return ["--scale", f"{h / 1080:.6g}"]
 
 
 def c_review_data(a, out):
@@ -352,6 +365,7 @@ def c_review_data(a, out):
     r = review_data.create(cut, edit, otio, target, p.path("transcripts"), video=video, decisions_path=dec if dec.exists() else None,
                            numbers_in_export=a.numbers, no_numbers=a.no_numbers, timeline_only=a.timeline_only, jobs=a.jobs,
                            ns=p.otio_namespace, external=p.external_clip_ids(), fade_out=p["music"]["fade_out_s"],
+                           height=int(p["filmcraft"].get("export_height") or 0) or None,
                            levels={"base": p["music"]["base_lufs"], "under": p["music"]["under_dialogue_lufs"], "low": p["music"]["low_lufs"]})
     from .deploy import write_app_config
     write_app_config(p, p.path("review"))

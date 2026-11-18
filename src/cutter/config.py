@@ -105,6 +105,7 @@ DEFAULTS = {
         "port": 9876,
         "token_file": "~/.config/cutter/filmcraft_token",
         "export_preset": "Match Source – Adaptive Low Bitrate",
+        "export_height": 0,     # >0: export at this height (scaled from the 1080-line sequence), e.g. 360 for stand-ins
     },
 }
 
