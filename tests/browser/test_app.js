@@ -122,20 +122,55 @@ main(async () => {
   const k1 = await frameChecksum(page);
   ok('Button "1 f ›"', k1.frame === b0.frame + 1, `frame ${k1.frame}`);
 
-  // jumps and shots
+  // jumps and shots (as in Premiere: ← → one frame, Shift five, ↑ ↓ edits)
+  const fBefore = (await frameChecksum(page)).frame;
+  await page.keyboard.press('ArrowLeft');
+  ok('← one frame back', (await frameChecksum(page)).frame === fBefore - 1);
+  await page.keyboard.press('Shift+ArrowRight');
+  ok('Shift+→ five frames forward', (await frameChecksum(page)).frame === fBefore + 4);
   const tBefore = (await videoState(page)).t;
-  await page.keyboard.press('ArrowLeft'); await frameChecksum(page);
+  await page.keyboard.press('ArrowDown'); await frameChecksum(page);
   v = await videoState(page);
-  ok('← jumps 2 s back', Math.abs(v.t - (tBefore - 2)) < 0.05, `${tBefore.toFixed(2)} -> ${v.t.toFixed(2)}`);
-  await page.keyboard.press('Shift+ArrowRight'); await frameChecksum(page);
-  v = await videoState(page);
-  const next = tl.shots.find((s) => s.start > tBefore - 2 + 0.001);
-  ok('Shift+→ next shot', Math.abs(v.t - (next.start + 0.02)) < 0.03, `Nr. ${next.nr} start ${next.start}, t=${v.t.toFixed(3)}`);
+  const next = tl.shots.find((s) => s.start > tBefore + 0.001);
+  ok('↓ next edit', Math.abs(v.t - (next.start + 0.02)) < 0.03, `Nr. ${next.nr} start ${next.start}, t=${v.t.toFixed(3)}`);
   const infoNr = await page.textContent('#info-nr');
   ok('Info box shows the Nr.', infoNr.trim() === `Nr. ${next.nr}`, infoNr);
-  await page.keyboard.press('Shift+ArrowLeft'); await frameChecksum(page);
+  await page.keyboard.press('ArrowUp'); await frameChecksum(page);
   v = await videoState(page);
-  ok('Shift+← previous shot', v.t < next.start, `t=${v.t.toFixed(3)}`);
+  ok('↑ previous edit', v.t < next.start, `t=${v.t.toFixed(3)}`);
+
+  // the visible part of the timeline: + zooms around the playhead, the wheel scrolls, Alt + wheel zooms, \ fits
+  const span = () => page.evaluate(() => {
+    const th = document.querySelector('#tl-thumb'), bar = document.querySelector('#tl-nav');
+    const on = document.querySelector('#zoom-button').classList.contains('on');
+    if (!bar.clientWidth) return { left: 0, width: 1, on, hidden: true };      // the bar shows only while zoomed
+    return { left: th.offsetLeft / bar.clientWidth, width: th.offsetWidth / bar.clientWidth, on };
+  });
+  const whole = await span();
+  await page.keyboard.press('+'); await page.keyboard.press('+');
+  const z2 = await span();
+  ok('+ + zooms in (quarter of the cut)', z2.on && Math.abs(z2.width - whole.width / 4) < 0.02, JSON.stringify([whole, z2]));
+  const tlBox = await page.locator('#tl-canvas').boundingBox();
+  await page.mouse.move(tlBox.x + tlBox.width / 2, tlBox.y + tlBox.height / 2);
+  await page.mouse.wheel(0, 200);
+  const z3 = await span();
+  ok('Wheel scrolls the zoomed timeline in time', z3.left > z2.left + 0.01 && Math.abs(z3.width - z2.width) < 0.005, JSON.stringify([z2, z3]));
+  await page.keyboard.down('Alt'); await page.mouse.wheel(0, -200); await page.keyboard.up('Alt');
+  const z4 = await span();
+  ok('Alt + wheel zooms in further', z4.width < z3.width * 0.8, JSON.stringify([z3, z4]));
+  const tPage = (await videoState(page)).t;
+  await page.keyboard.press('\\');
+  const z5 = await span();
+  ok('\\ shows the whole cut', !z5.on && z5.hidden, JSON.stringify(z5));
+  await page.keyboard.press('\\');
+  ok('\\ again: back to the last zoom', Math.abs((await span()).width - z4.width) < 0.01);
+  await page.keyboard.press('End');
+  const atEnd = await span(), tEnd = (await videoState(page)).t;
+  ok('End: the end of the cut, the view follows', tEnd > tl.duration - 1 && atEnd.left + atEnd.width > 0.98, `${tEnd} ${JSON.stringify(atEnd)}`);
+  await page.keyboard.press('Home');
+  ok('Home: the start', (await videoState(page)).t < 0.1 && (await span()).left < 0.01);
+  await page.keyboard.press('\\');
+  await setTime(page, tPage);
 
   // comments
   const ids = [];

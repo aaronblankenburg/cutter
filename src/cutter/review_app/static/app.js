@@ -62,7 +62,7 @@
     f: null, tl: null, fps: 25, shots: [], editPoints: [], sections: [], music: [], thumbs: [],
     sectionColor: new Map(), entries: [], rev: null, firstLoad: true, polling: false,
     filterPerson: store.get('filterPerson', ''), filterStatus: store.get('filterStatus', ''),
-    rIn: null, rOut: null, loop: null, zoom: false, reverse: null,
+    rIn: null, rOut: null, loop: null, view: null, lastView: null, reverse: null,
     hover: null, drag: null, selected: null, infoKey: '', lastNr: null, timeText: '', positionText: '',
     notesData: null, notes: [], noteSelected: null, followPause: 0, nowKey: '',
     alts: [], altKey: '', parentKey: '',
@@ -398,7 +398,7 @@
     x = clamp(x, 0, Math.max(0, duration() - 0.5 / S.fps));
     if (S.loop && !opt.loop && (x < S.loop.t - 2.2 || x > S.loop.t + 2.2)) stopLoop();
     video.currentTime = x;
-    time(); info(); draw();
+    time(); info(); keepInView(false); draw();
     return x;
   }
   // make larger jumps through the timeline or the list visible and reversible
@@ -449,6 +449,7 @@
     const x = video.currentTime - dt * S.reverse.speed;
     if (x <= 0) { video.currentTime = 0; stopReverse(); return; }
     video.currentTime = x;
+    keepInView(true);
   }
   function stopReverse() { if (S.reverse) { S.reverse = null; time(); } }
 
@@ -475,7 +476,69 @@
   }
   function hint(text) { const h = $('#video-hint'); h.hidden = !text; h.textContent = text || ''; }
 
-  function toggleZoom() { S.zoom = !S.zoom; $('#zoom-button').classList.toggle('on', S.zoom); draw(); }
+  // ------------------------------------------------------------ the visible part of the timeline (as in Premiere)
+  // S.view: [from, to] in seconds, null = the whole cut. Wheel scrolls, Alt/Ctrl + wheel (or a pinch) zooms around
+  // the pointer, + and - zoom around the playhead, \ switches between the whole cut and the last zoom.
+  const MIN_WINDOW = 1;
+  function zoomed() { return !!S.view; }
+  function setView(a, b) {
+    const d = duration() || 1;
+    let w = clamp(b - a, Math.min(MIN_WINDOW, d), d);
+    if (w >= d - 1e-6) { S.view = null; }
+    else {
+      a = clamp(a, 0, d - w);
+      S.view = [a, a + w];
+      S.lastView = S.view;
+    }
+    $('#zoom-button').classList.toggle('on', zoomed());
+    draw();
+  }
+  function zoomBy(factor, at) {
+    const [a, b] = view(), w = (b - a) * factor;
+    const x = at == null ? clamp(video.currentTime, a, b) : at;
+    const f = (x - a) / (b - a || 1);
+    setView(x - f * w, x - f * w + w);
+  }
+  function scrollBy(seconds) {
+    if (!S.view) return;
+    const [a, b] = S.view;
+    setView(a + seconds, b + seconds);
+  }
+  function fitToggle() {
+    if (S.view) setView(0, duration());
+    else if (S.lastView) { const [a, b] = S.lastView, w = b - a, x = video.currentTime; setView(x - w / 2, x + w / 2); }
+    else zoomBy(Math.min(40, duration()) / (duration() || 1));
+  }
+  function toggleZoom() {
+    if (S.view) setView(0, duration());
+    else { const w = Math.min(40, duration()), x = video.currentTime; setView(x - w / 2, x + w / 2); }
+  }
+  // the playhead stays in sight: while playing the view turns a page when the playhead reaches its edge (not when
+  // the view was scrolled away from it), a jump centres it
+  function keepInView(playing) {
+    if (!S.view || (S.drag && S.drag.view)) { S.wasInView = true; return; }
+    const [a, b] = S.view, x = video.currentTime, w = b - a, inside = x >= a && x <= b;
+    const was = S.wasInView !== false;
+    S.wasInView = inside;
+    if (inside || (playing && !was)) return;
+    if (playing && x > b && x < b + w * 0.5) setView(x - w * 0.05, x + w * 0.95);
+    else if (playing && x < a && x > a - w * 0.5) setView(x - w * 0.95, x + w * 0.05);
+    else setView(x - w / 2, x + w / 2);
+    S.wasInView = true;
+  }
+  function scrolledAway() {
+    const [a, b] = view(), x = video.currentTime;
+    S.wasInView = x >= a && x <= b;
+  }
+  // the bar under the timeline: the visible part as a handle; drag it to scroll, drag its edges to zoom
+  function nav() {
+    const bar = $('#tl-nav'), thumb = $('#tl-thumb');
+    if (!bar) return;
+    const d = duration() || 1, [a, b] = view();
+    thumb.style.left = `${a / d * 100}%`;
+    thumb.style.width = `${Math.max(0, (b - a) / d * 100)}%`;
+    bar.classList.toggle('whole', !S.view);
+  }
   function fullscreen() {
     const r = $('#video-frame');
     if (document.fullscreenElement || document.webkitFullscreenElement) {
@@ -864,10 +927,8 @@
   function view() {
     if (S.drag && S.drag.view) return S.drag.view;
     const d = duration() || 1;
-    if (!S.zoom) return [0, d];
-    const win = Math.min(40, d);
-    const a = clamp(video.currentTime - win / 2, 0, d - win);
-    return [a, a + win];
+    if (!S.view) return [0, d];
+    return [clamp(S.view[0], 0, d), clamp(S.view[1], 0, d)];
   }
   const LAYOUT = { yDot: 9, yNote: 14, yShot: 20, hShot: 32 };
   function draw() {
@@ -881,6 +942,7 @@
     const [a, b] = view(), X = (x) => (x - a) / (b - a) * w;
     const { yDot, yNote, yShot, hShot } = LAYOUT, yMus = yShot + hShot + 4, hMus = Math.max(10, h - yMus - 4);
     ctx.textBaseline = 'middle';
+    nav();
 
     // shots, coloured by section
     S.shots.forEach((s, i) => {
@@ -893,7 +955,7 @@
       if (!s.file) { ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(x0, yShot + 5, bw, hShot - 10); }
       ctx.fillStyle = 'rgba(255,255,255,.7)';
       for (const e of s.cutaways || []) ctx.fillRect(X(e.start), yShot + hShot - 5, Math.max(1, X(e.end) - X(e.start)), 3);
-      if (S.zoom && x1 - x0 > 18) {
+      if (x1 - x0 > 18 && (zoomed() || x1 - x0 > 26)) {
         ctx.fillStyle = 'rgba(0,0,0,.78)'; ctx.font = '600 11px system-ui, sans-serif';
         ctx.fillText(String(s.nr), Math.max(x0, 0) + 4, yShot + 10);
       }
@@ -905,7 +967,7 @@
       const x0 = X(sec.start), x1 = X(sec.end);
       ctx.fillStyle = '#0f1216'; ctx.fillRect(x0 - 1, yShot, 2, hShot);
       const name = sec.name || '', room = Math.min(x1, w) - Math.max(x0, 0) - 8;
-      if (!S.zoom && room > 24) {
+      if (!zoomed() && room > 24) {
         let txt = name;
         while (txt.length > 3 && ctx.measureText(txt).width > room) txt = txt.slice(0, -2);
         if (txt !== name) txt = txt.replace(/\s+$/, '') + '…';
@@ -924,10 +986,17 @@
         ctx.fillStyle = '#d4dae2'; ctx.fillText(txt, Math.max(x0, 0) + 3, yMus + hMus / 2); ctx.restore();
       }
     }
-    // zoom: second marks
-    if (S.zoom) {
+    // zoomed: time marks, as dense as the width allows (a label at least every 70 px)
+    if (zoomed()) {
+      const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+      const label = steps.find((q) => q / (b - a) * w >= 70) || 600;
+      const tick = steps.filter((q) => q <= label && label % q === 0 && q / (b - a) * w >= 8).shift() || label;
       ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.font = '10px system-ui, sans-serif';
-      for (let x = Math.ceil(a / 5) * 5; x <= b; x += 5) { const px = X(x); ctx.fillRect(px, h - 4, 1, 4); if (x % 10 === 0) ctx.fillText(short(x).replace(/[.,]\d$/, ''), px + 2, h - 8); }
+      for (let x = Math.ceil(a / tick) * tick; x <= b; x += tick) {
+        const px = X(x), big = Math.abs(x / label - Math.round(x / label)) < 1e-6;
+        ctx.fillRect(px, h - (big ? 6 : 3), 1, big ? 6 : 3);
+        if (big) ctx.fillText(short(x).replace(/[.,]\d$/, ''), px + 2, h - 9);
+      }
     }
     // range I/O
     const br = range();
@@ -1237,6 +1306,48 @@
     // timeline with the mouse: hovering shows a preview, a click jumps, dragging scrubs.
     // With a finger: tapping only shows the preview and the comment, only a horizontal drag scrubs.
     // Otherwise a tap while scrolling or on a comment dot changes the position without anyone noticing.
+    // wheel: scroll in time; Alt or Ctrl/Cmd + wheel (and a trackpad pinch, which arrives as Ctrl + wheel): zoom
+    cv.addEventListener('wheel', (ev) => {
+      const r = cv.getBoundingClientRect(), [a, b] = view();
+      const px = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? r.width : 1;
+      if (ev.altKey || ev.ctrlKey || ev.metaKey) {
+        ev.preventDefault();
+        const at = a + (ev.clientX - r.left) / r.width * (b - a);
+        zoomBy(Math.exp(clamp(ev.deltaY * px, -300, 300) * 0.002), at);
+        return;
+      }
+      const delta = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY) * px;
+      if (!S.view || !delta) return;               // the whole cut: the page scrolls as usual
+      ev.preventDefault();
+      scrollBy(delta / r.width * (b - a));
+      scrolledAway();
+      hidePreview();
+    }, { passive: false });
+    const bar = $('#tl-nav');
+    bar.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      const r = bar.getBoundingClientRect(), d = duration() || 1, [a, b] = view();
+      const t = (ev.clientX - r.left) / r.width * d;
+      const edge = 8 / r.width * d;
+      const mode = Math.abs(t - a) < edge && S.view ? 'from' : Math.abs(t - b) < edge && S.view ? 'to'
+        : t >= a && t <= b ? 'move' : 'jump';
+      if (mode === 'jump') { const w = b - a; setView(t - w / 2, t + w / 2); }
+      bar.setPointerCapture(ev.pointerId);
+      bar.drag = { mode, x0: ev.clientX, view: view(), d, width: r.width };
+      ev.preventDefault();
+    });
+    bar.addEventListener('pointermove', (ev) => {
+      const z = bar.drag;
+      if (!z) return;
+      const dt = (ev.clientX - z.x0) / z.width * z.d, [a, b] = z.view;
+      if (z.mode === 'from') setView(Math.min(a + dt, b - MIN_WINDOW), b);
+      else if (z.mode === 'to') setView(a, Math.max(b + dt, a + MIN_WINDOW));
+      else setView(a + dt, b + dt);
+      scrolledAway();
+    });
+    for (const kind of ['pointerup', 'pointercancel']) bar.addEventListener(kind, () => { bar.drag = null; });
+    bar.addEventListener('dblclick', () => setView(0, duration()));
+
     cv.addEventListener('pointerdown', (ev) => {
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
       clearTimeout(previewTimer); previewTimer = null;
@@ -1315,8 +1426,11 @@
       const fn = capital ? null : {
         ' ': toggle, k: stop, K: stop, l: forwards, L: forwards, j: backwards, J: backwards,
         ',': () => frame(-1), '.': () => frame(1),
-        ArrowLeft: () => (ev.shiftKey ? prevShot() : relative(-2)),
-        ArrowRight: () => (ev.shiftKey ? nextShot() : relative(2)),
+        ArrowLeft: () => frame(ev.shiftKey ? -5 : -1),
+        ArrowRight: () => frame(ev.shiftKey ? 5 : 1),
+        ArrowUp: prevShot, ArrowDown: nextShot,
+        Home: () => { stopReverse(); seek(0); }, End: () => { stopReverse(); seek(duration()); },
+        '+': () => zoomBy(0.5), '=': () => zoomBy(0.5), '-': () => zoomBy(2), '\\': fitToggle,
         n: () => { video.pause(); stopReverse(); note.focus(); }, N: () => { video.pause(); stopReverse(); note.focus(); },
         i: setIn, I: setIn, o: setOut, O: setOut, x: () => create({ action: 'remove' }), X: () => create({ action: 'remove' }),
         s: loop, S: loop, z: toggleZoom, Z: toggleZoom, '?': () => $('#help-dialog').showModal(),
@@ -1341,7 +1455,7 @@
     animating = true;
     const tick = () => {
       if (video.paused) { animating = false; draw(); return; }
-      checkLoop(); time(); info(); draw();
+      checkLoop(); time(); info(); keepInView(true); draw();
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);

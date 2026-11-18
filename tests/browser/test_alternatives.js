@@ -102,7 +102,7 @@ main(async () => {
       + '<iframe id="f" src="./?cut=cut6" style="width:1400px;height:860px;border:0"></iframe></body>' }));
     await host.addInitScript(() => { try { localStorage.removeItem('sf_name'); } catch (e) { /* */ } });
     await host.goto(`${BASE}host.html`, { waitUntil: 'domcontentloaded' });
-    await waitUntil(host, () => (window.got || []).some((x) => x.entries), null, 30000);
+    await waitUntil(host, () => (window.got || []).some((x) => x.entries && x.entries.length === 2), null, 30000);
     const frame = host.frames().find((f) => f.url().includes('cut6') || f.url().includes('f=cut6'));
     ok('Embedded: the parent hears the cut and its comments', await host.evaluate(() => {
       const m = window.got.filter((x) => x.entries).pop();

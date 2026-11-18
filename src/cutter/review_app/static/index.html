@@ -55,6 +55,7 @@
 
     <div class="timeline" id="timeline">
       <canvas id="tl-canvas" data-i18n-aria="timeline_aria" aria-label="Timeline: click jumps, drag scrubs"></canvas>
+      <div class="tl-nav" id="tl-nav" data-i18n-title="nav_title" title="Visible part: drag to scroll, drag the edges to zoom, double-click for the whole cut"><div class="tl-thumb" id="tl-thumb"></div></div>
       <div class="tl-preview" id="tl-preview" hidden>
         <div class="tl-image" id="tl-image"></div>
         <div class="tl-text" id="tl-text"></div>
@@ -135,10 +136,15 @@
       <tr><th data-i18n="key_space">Space</th><td data-i18n="key_space_text">Play / pause</td></tr>
       <tr><th>J · K · L</th><td data-i18n="key_jkl_text">backwards · stop · forwards (press again: faster)</td></tr>
       <tr><th>, · .</th><td data-i18n="key_frames_text">1 frame back · 1 frame forward</td></tr>
-      <tr><th>← · →</th><td data-i18n="key_arrows_text">2 s back · 2 s forward</td></tr>
-      <tr><th data-i18n="key_shift">Shift + ← · →</th><td data-i18n="key_shift_text">previous · next shot</td></tr>
+      <tr><th>← · →</th><td data-i18n="key_arrows_text">1 frame back · 1 frame forward</td></tr>
+      <tr><th data-i18n="key_shift">Shift + ← · →</th><td data-i18n="key_shift_text">5 frames back · 5 frames forward</td></tr>
+      <tr><th>↑ · ↓</th><td data-i18n="key_updown_text">previous · next edit</td></tr>
+      <tr><th data-i18n="key_home">Home · End</th><td data-i18n="key_home_text">start · end of the cut</td></tr>
       <tr><th>S</th><td data-i18n="key_s_text">Edit preview: loop from 2 s before to 2 s after the nearest edit</td></tr>
       <tr><th>Z</th><td data-i18n="key_z_text">Zoom: timeline ±20 s around the current position</td></tr>
+      <tr><th>+ · −</th><td data-i18n="key_zoom_text">zoom in · out (around the playhead)</td></tr>
+      <tr><th>\</th><td data-i18n="key_fit_text">whole cut · back to the last zoom</td></tr>
+      <tr><th data-i18n="key_wheel">Mouse wheel</th><td data-i18n="key_wheel_text">scroll the zoomed timeline; with Alt or Ctrl (or a pinch): zoom around the pointer</td></tr>
       <tr><th>N</th><td data-i18n="key_n_text">Write a note (the video pauses)</td></tr>
       <tr><th>I · O</th><td data-i18n="key_io_text">Range start · end for the next comment</td></tr>
       <tr><th>X</th><td data-i18n="key_x_text">“Remove” for the current position</td></tr>
