@@ -113,8 +113,40 @@
     if (a.submit === false) $('#send').hidden = true;
     EMBEDDED = a.embedded === true;
     document.body.classList.toggle('embedded', EMBEDDED);
+    if (EMBEDDED && !S.fitObserved) {
+      S.fitObserved = true;
+      window.addEventListener('resize', fitEmbedded);
+      new ResizeObserver(fitEmbedded).observe($('.layout'));
+      fitEmbedded();
+    }
     chooseLanguage(new URLSearchParams(location.search).get('lang') || a.ui_language);
     translatePage();
+  }
+  // embedded on a wide screen: the page fits the frame (the video gets smaller, only the list scrolls); on a narrow one
+  // the parent page makes the frame as tall as the page, so that only the parent scrolls. Either way it is told the
+  // height the page needs.
+  const WIDE = window.matchMedia('(min-width: 1000px)');
+  let fitting = 0;
+  function fitEmbedded() {
+    if (!EMBEDDED || fitting) return;
+    fitting = requestAnimationFrame(() => {
+      fitting = 0;
+      const frame = $('.video-frame'), root = document.documentElement;
+      if (WIDE.matches) {
+        frame.style.width = '';
+        const over = root.scrollHeight - window.innerHeight;
+        const h = frame.getBoundingClientRect().height;
+        if (over > 0 && h > 0) frame.style.width = `min(100%, ${Math.max(180, h - over - 3) * 16 / 9}px)`;
+      } else frame.style.width = '';
+      tellHeight();
+    });
+  }
+  function tellHeight() {
+    if (!EMBEDDED || window.parent === window) return;
+    const height = WIDE.matches ? 0 : Math.ceil($('.layout').getBoundingClientRect().bottom + window.scrollY);
+    if (height === S.parentHeight) return;
+    S.parentHeight = height;
+    try { window.parent.postMessage({ source: 'cutter-review', height, wide: WIDE.matches }, location.origin); } catch (e) { /* other origin */ }
   }
   // embedded: the parent page learns which cut is shown and its comments (for its own buttons and counts)
   function tellParent() {
@@ -185,7 +217,7 @@
   const notesAt = (x) => S.notes.filter((d) => d.t != null && d.t - 1e-3 <= x && x < (d.t_to != null ? d.t_to : d.t + 2));
   // comments "at this point" while watching: their range, otherwise 4 s from the comment
   const commentsAt = (x) => S.entries.filter((e) => e.t != null && e.t - 0.3 <= x && x < (e.t_to != null ? e.t_to : e.t + 4));
-  const altAt = (x) => S.alts.find((p) => p.t - 1e-3 <= x && x < p.t_to) || null;
+  const altsAt = (x) => S.alts.filter((p) => p.t - 1e-3 <= x && x < p.t_to);
   const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + ' …' : s);
   function nearestEdit(x) {
     let best = null;
@@ -276,6 +308,10 @@
     Object.assign(S, { notesData: dec, notes: dec ? dec.entries : [], noteSelected: null, nowKey: '' });
     S.alts = Array.isArray(tl.alternatives) ? tl.alternatives : [];
     S.altKey = '';
+    const ab = $('#alts-button');
+    ab.hidden = !S.alts.length;
+    ab.textContent = t('alt_places', { n: S.alts.length });
+    ab.title = t('alt_places_title');
     $('#entries').scrollTop = 0;
     $('#film-title').textContent = tl.title || t('app_title');
     document.title = t('page_title', { cut: id, title: shortTitle(tl.title) });
@@ -788,7 +824,7 @@
     const m = musicAt(x), cw = (s.cutaways || []).find((y) => y.start <= x && x < y.end) || null, c = currentEdit();
     const notes = notesAt(x);
     showNow(x, notes);
-    showAlternatives(altAt(x));
+    showAlternatives(altsAt(x));
     follow();
     const key = [S.f, LANG, s.nr, sz && sz.start, sub && sub.start, m && m.cue, cw && cw.start, c && c.t, !!S.loop,
       notes.map((d) => d.id).join(',')].join('|');
@@ -910,12 +946,12 @@
       ctx.beginPath(); ctx.moveTo(x - 5, yShot - 5); ctx.lineTo(x + 5, yShot - 5); ctx.lineTo(x, yShot + 1); ctx.closePath(); ctx.fill();
     }
     // places with alternatives: a teal line along the top of their shots
-    const altNow = altAt(video.currentTime);
+    const altNow = altsAt(video.currentTime);
     for (const p of S.alts) {
       if (p.t_to < a || p.t > b) continue;
-      const x0 = X(p.t), x1 = Math.max(X(p.t_to), x0 + 3);
-      ctx.fillStyle = ALT_COLOR; ctx.globalAlpha = altNow === p ? 1 : 0.75;
-      ctx.fillRect(x0 + 1, yShot, Math.max(2, x1 - x0 - 2), altNow === p ? 4 : 3);
+      const x0 = X(p.t), x1 = Math.max(X(p.t_to), x0 + 3), now = altNow.includes(p);
+      ctx.fillStyle = ALT_COLOR; ctx.globalAlpha = now ? 1 : 0.75;
+      ctx.fillRect(x0 + 1, yShot, Math.max(2, x1 - x0 - 2), now ? 4 : 3);
       ctx.globalAlpha = 1;
     }
     // decisions as violet brackets between the comment dots and the shots
@@ -985,8 +1021,8 @@
     if (p) txt.append(el('span', 'note', `${p.person}: ${describe(p)}`));
     if (p && p.reply) txt.append(el('span', 'tl-reply', t('tl_reply', { agent: AGENT, text: truncate(p.reply, 110) })));
     for (const d of notesAt(x)) txt.append(el('span', 'tl-note', `◆ ${d.title}`));
-    const alt = altAt(x);
-    if (alt) txt.append(el('span', 'tl-alt', t('alt_count', { n: alt.options.length })));
+    const alts = altsAt(x);
+    if (alts.length) txt.append(el('span', 'tl-alt', t('alt_count', { n: alts.reduce((n, q) => n + q.options.length, 0) })));
     if (tapped) txt.append(el('span', 'tip', t('drag_to_jump')));
     draw();
   }
@@ -1015,22 +1051,25 @@
     return o ? t('alt_taken', { n, clip: o.clip, range: range2(o.in, o.out) }) : t('alt_taken_short', { n });
   }
   const myChoice = (p) => S.entries.find((e) => own(e) && e.alternative && e.alternative.split('/')[0] === p.id) || null;
-  function showAlternatives(p) {
-    const box = $('#alts'), mine = p && myChoice(p);
-    const key = [S.f, LANG, p ? p.id : '', mine ? mine.alternative + ':' + mine.id : ''].join('|');
+  function showAlternatives(places) {
+    const box = $('#alts');
+    const key = [S.f, LANG, ...places.map((p) => { const m = myChoice(p); return p.id + (m ? ':' + m.alternative + ':' + m.id : ''); })].join('|');
     if (key === S.altKey) return;
     S.altKey = key;
     for (const v of box.querySelectorAll('video')) v.pause();
     box.textContent = '';
-    box.hidden = !p;
-    if (!p) return;
+    box.hidden = !places.length;
+    for (const p of places) box.append(altPlace(p, box));
+  }
+  function altPlace(p, box) {
+    const mine = myChoice(p), place = el('div', 'alts-place');
     const head = el('div', 'alts-head');
     head.append(el('span', 'alts-title', t('alt_title', { n: p.options.length })),
       el('span', 'alts-where', p.nr_to && p.nr_to !== p.nr ? t('alt_shots', { a: p.nr, b: p.nr_to }) : t('alt_shot', { nr: p.nr ?? '–' })));
-    box.append(head);
-    if (p.reason) box.append(el('p', 'alts-reason', p.reason));
+    place.append(head);
+    if (p.reason) place.append(el('p', 'alts-reason', p.reason));
     if (p.current && p.current.clip) {
-      box.append(el('p', 'alts-current', t('alt_current', { clip: p.current.clip, range: range2(p.current.in, p.current.out) })));
+      place.append(el('p', 'alts-current', t('alt_current', { clip: p.current.clip, range: range2(p.current.in, p.current.out) })));
     }
     const chosen = mine ? mine.alternative.split('/')[1] : null;
     const ol = el('ol', 'alts-options');
@@ -1057,10 +1096,11 @@
       li.append(b);
       ol.append(li);
     }
-    box.append(ol);
+    place.append(ol);
     const keep = button(chosen === 'keep' ? t('alt_kept') : t('alt_keep'), t('alt_keep_title'), () => choose(p, null));
     keep.className = 'alt-keep' + (chosen === 'keep' ? ' save' : '');
-    box.append(keep);
+    place.append(keep);
+    return place;
   }
   async function choose(p, o) {
     if (!S.name && !(await askName())) return;
@@ -1251,6 +1291,13 @@
     $('#cut-select').addEventListener('change', (ev) => { ev.target.blur(); loadCut(ev.target.value); });
     $('#name-button').addEventListener('click', (ev) => { ev.currentTarget.blur(); askName(); });
     $('#help-button').addEventListener('click', (ev) => { ev.currentTarget.blur(); $('#help-dialog').showModal(); });
+    // the next place with alternatives after the playhead (then the first again)
+    $('#alts-button').addEventListener('click', (ev) => {
+      ev.currentTarget.blur();
+      const places = [...S.alts].sort((p, q) => p.t - q.t);
+      const next = places.find((p) => p.t > video.currentTime + 0.5) || places[0];
+      if (next) { video.pause(); seek(next.t + 0.05); }
+    });
     $('#filter-person').addEventListener('change', (ev) => { ev.target.blur(); S.filterPerson = ev.target.value; store.set('filterPerson', S.filterPerson); list(); draw(); });
     $('#filter-status').addEventListener('change', (ev) => { ev.target.blur(); S.filterStatus = ev.target.value; store.set('filterStatus', S.filterStatus); list(); draw(); });
     const entries = $('#entries');

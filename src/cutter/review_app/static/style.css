@@ -204,6 +204,12 @@ select, input[type="text"], textarea {
 body.embedded .brand { display: none; }
 body.embedded .top { justify-content: flex-end; }
 body.embedded .layout { max-width: none; }
+@media (min-width: 1000px) {
+  body.embedded .layout { padding-bottom: 8px; }     /* the page fits the frame (app.js fitEmbedded) */
+}
+.alts-button { min-height: 34px; padding: 4px 12px; border-radius: 999px; font-weight: 600; color: #2dd4bf;
+  border-color: rgba(45, 212, 191, .45); white-space: nowrap; }
+.alts-place + .alts-place { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .reactions { display: flex; gap: 6px; }
 .reactions button { font-size: 20px; padding: 2px 10px; }
 #note { min-width: 0; font-size: 16px; }

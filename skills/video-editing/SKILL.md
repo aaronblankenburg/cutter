@@ -71,7 +71,8 @@ Follow [references/next-cut.md](references/next-cut.md): wait for the reviewers 
 `cuts/cut<n>/plan.py` (the changes as code) and `decisions.json` (why, at the right moment in the film), render,
 publish, reply to every comment, and wait for the next round. In both kinds of cut, record in
 `cuts/cut<n>/alternatives.json` the places where you really weighed other clips or ranges (at most 3 options
-each); the review app lets the reviewers watch them and choose.
+each); the review app lets the reviewers watch them and choose. Write it when edit.json is final and give each place
+`nr` and `clip` (the clip in the cut there), so it stays at the right shot when numbers move.
 
 ## 5. When something fails
 

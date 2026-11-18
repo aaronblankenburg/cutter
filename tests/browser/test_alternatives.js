@@ -29,6 +29,11 @@ main(async () => {
   ok('timeline.json has the place with 3 options, two with a preview', place && place.id === 'workshop' && place.options.length === 3
     && place.options.filter((o) => o.file).length === 2 && !place.options[2].file, JSON.stringify(place && place.options.map((o) => o.file)));
   ok('No alternatives box away from the place', !(await visible(p, '#alts')));
+  ok('Header button counts the places', (await text(p, '#alts-button')) === '⇄ Alternatives: 1', await text(p, '#alts-button'));
+  await p.click('#alts-button');
+  await waitUntil(p, () => !document.querySelector('#alts').hidden);
+  ok('Header button jumps to the place', Math.abs((await videoState(p)).t - place.t) < 0.5, JSON.stringify(await videoState(p)));
+  await seekTo(p, 0.2);
   await seekTo(p, place.t + 0.5);
   await waitUntil(p, () => !document.querySelector('#alts').hidden);
   ok('Box with the alternatives at the place', (await text(p, '.alts-title')).includes('(3)') && (await text(p, '.alts-reason')) === place.reason,
@@ -97,22 +102,32 @@ main(async () => {
       + '<iframe id="f" src="./?cut=cut6" style="width:1400px;height:860px;border:0"></iframe></body>' }));
     await host.addInitScript(() => { try { localStorage.removeItem('sf_name'); } catch (e) { /* */ } });
     await host.goto(`${BASE}host.html`, { waitUntil: 'domcontentloaded' });
-    await waitUntil(host, () => (window.got || []).length > 0, null, 30000);
+    await waitUntil(host, () => (window.got || []).some((x) => x.entries), null, 30000);
     const frame = host.frames().find((f) => f.url().includes('cut6') || f.url().includes('f=cut6'));
     ok('Embedded: the parent hears the cut and its comments', await host.evaluate(() => {
-      const m = window.got[window.got.length - 1];
+      const m = window.got.filter((x) => x.entries).pop();
       return m.cut === 'cut6' && m.entries.length === 2 && m.open === 2;
-    }), JSON.stringify(await host.evaluate(() => window.got.map((m) => [m.cut, m.open, m.entries.length]))));
+    }), JSON.stringify(await host.evaluate(() => window.got.map((m) => [m.cut, m.open, m.entries && m.entries.length, m.height]))));
     ok('Embedded: no name dialog, no name button, no "Send feedback", no brand', await frame.evaluate(() =>
       !document.querySelector('#name-dialog').open && document.querySelector('#name-button').hidden
       && document.querySelector('#send').hidden && getComputedStyle(document.querySelector('.brand')).display === 'none'));
     ok('Embedded: the layout uses the full width', await frame.evaluate(() =>
       document.querySelector('.layout').getBoundingClientRect().width >= window.innerWidth - 1));
+    ok('Embedded, wide: the page fits the frame (only the list scrolls)', await frame.evaluate(() =>
+      document.documentElement.scrollHeight <= window.innerHeight + 1), String(await frame.evaluate(() => document.documentElement.scrollHeight)));
+    ok('Embedded, wide: the parent is told the page fits', await host.evaluate(() => window.got.some((m) => m.wide === true && m.height === 0)));
+    await host.evaluate(() => { document.getElementById('f').style.width = '700px'; });
+    await waitUntil(host, () => window.got.some((m) => m.wide === false && m.height > 860));
+    const tall = await host.evaluate(() => window.got.filter((m) => m.wide === false).pop().height);
+    ok('Embedded, narrow: the parent is told the height of the page', tall === await frame.evaluate(() =>
+      Math.ceil(document.querySelector('.layout').getBoundingClientRect().bottom + window.scrollY)), String(tall));
+    await host.evaluate(() => { document.getElementById('f').style.width = '1400px'; });
+    await waitUntil(host, () => window.got.filter((x) => 'wide' in x).pop().wide === true);
     await frame.fill('#note', 'From the host');
     await frame.press('#note', 'Enter');
-    await waitUntil(host, () => window.got[window.got.length - 1].entries.length === 3);
+    await waitUntil(host, () => window.got.filter((x) => x.entries).pop().entries.length === 3);
     ok('Embedded: a new comment is the fixed person\'s and reaches the parent', await host.evaluate(() => {
-      const m = window.got[window.got.length - 1];
+      const m = window.got.filter((x) => x.entries).pop();
       return m.open === 3 && m.entries.some((e) => e.text === 'From the host' && e.person === 'Host User');
     }));
     await screenshot(host, 'embedded');

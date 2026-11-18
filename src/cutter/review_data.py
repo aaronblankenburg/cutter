@@ -275,6 +275,24 @@ def without_internal(obj):
     return obj
 
 
+def _place_by_clip(pid, clip, nr, nr_to, shots, fail):
+    """The shot of a place that names the clip in it ("clip"): shot numbers change while a cut is planned, the clip
+    does not. With nr: that shot if it shows the clip, else the nearest shot that does (nr_to moves along). Without
+    nr: the one shot with the clip."""
+    with_clip = [s["nr"] for s in shots if s.get("clip") == clip]
+    if not with_clip:
+        fail(f"{pid}: no shot of the cut shows {clip} (\"clip\" is the clip in the cut at this place)")
+    if nr is None:
+        if len(with_clip) > 1:
+            fail(f"{pid}: {clip} is in shots {', '.join(map(str, with_clip))}; give nr as well")
+        return with_clip[0], None
+    if nr in with_clip:
+        return nr, nr_to
+    found = min(with_clip, key=lambda n: (abs(n - nr), n))
+    log(f"  alternatives {pid}: shot {nr} does not show {clip}, shot {found} does; using {found}")
+    return found, None if nr_to is None else nr_to + (found - nr)
+
+
 def alternatives(path, tl, clip_paths):
     """The places of alternatives.json (where the agent weighed other clips or ranges) for the app, with the time of
     their shot(s) in this cut and the source of every option. clip_paths: {clip ID: file} to render the previews."""
@@ -290,10 +308,13 @@ def alternatives(path, tl, clip_paths):
         if not PLACE_RE.fullmatch(pid) or pid in ids:
             fail(f"every place needs its own id of letters, digits, - and _ ({pid!r})")
         ids.add(pid)
-        if "nr" in x:
-            a, b = shots.get(x["nr"]), shots.get(x.get("nr_to", x["nr"]))
+        nr, nr_to = x.get("nr"), x.get("nr_to")
+        if x.get("clip"):
+            nr, nr_to = _place_by_clip(pid, str(x["clip"]), nr, nr_to, tl["shots"], fail)
+        if nr is not None:
+            a, b = shots.get(nr), shots.get(nr if nr_to is None else nr_to)
             if not a or not b or b["end"] <= a["start"]:
-                fail(f"{pid}: shot {x['nr']} to {x.get('nr_to', x['nr'])} does not exist in the timeline")
+                fail(f"{pid}: shot {nr} to {nr if nr_to is None else nr_to} does not exist in the timeline")
             t, t_to = a["start"], b["end"]
         elif "t" in x:
             t, t_to = float(x["t"]), float(x.get("t_to", x["t"]))
@@ -302,8 +323,8 @@ def alternatives(path, tl, clip_paths):
         opts = x.get("options") or []
         if not opts or len(opts) > MAX_OPTIONS:
             fail(f"{pid}: 1 to {MAX_OPTIONS} options")
-        shot = shots.get(x.get("nr")) or {}
-        place = {"id": pid, "nr": x.get("nr"), "nr_to": x.get("nr_to"), "t": round(t, 3), "t_to": round(t_to, 3),
+        shot = shots.get(nr) or {}
+        place = {"id": pid, "nr": nr, "nr_to": nr_to, "t": round(t, 3), "t_to": round(t_to, 3),
                  "reason": x.get("reason") or "",
                  "current": {"clip": shot.get("clip"), "in": shot.get("source_in"), "out": shot.get("source_out")},
                  "options": []}

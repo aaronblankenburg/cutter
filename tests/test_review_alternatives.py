@@ -32,6 +32,26 @@ class Places(unittest.TestCase):
             self.assertEqual(place["options"][0]["_path"], "/x/C007.mp4")
             self.assertNotIn("_path", json.dumps(review_data.without_internal(place)))
 
+    def test_the_clip_finds_the_shot_when_numbers_moved(self):
+        tl = {"duration": 30.0, "shots": [
+            {"nr": 1, "start": 0.0, "end": 8.0, "clip": "C001", "source_in": 2.0, "source_out": 10.0},
+            {"nr": 2, "start": 8.0, "end": 20.0, "clip": "C002", "source_in": 0.0, "source_out": 12.0},
+            {"nr": 3, "start": 20.0, "end": 25.0, "clip": "C003", "source_in": 0.0, "source_out": 5.0},
+            {"nr": 4, "start": 25.0, "end": 30.0, "clip": "C001", "source_in": 20.0, "source_out": 25.0}]}
+        opt = [{"clip": "C007", "in": 0, "out": 1}]
+        with tempfile.TemporaryDirectory() as d:
+            a, b, c = review_data.alternatives(write(d, [
+                {"id": "a", "nr": 2, "clip": "C003", "options": opt},     # moved by one: the nearest shot of C003
+                {"id": "b", "clip": "C002", "options": opt},              # the clip alone, in one shot
+                {"id": "c", "nr": 4, "clip": "C001", "options": opt}]), tl, {})
+            self.assertEqual((a["nr"], a["t"], a["current"]["clip"]), (3, 20.0, "C003"))
+            self.assertEqual((b["nr"], b["t"], b["t_to"]), (2, 8.0, 20.0))
+            self.assertEqual((c["nr"], c["current"]["in"]), (4, 20.0))
+            for bad in ({"id": "x", "clip": "C001", "options": opt},       # in two shots: nr needed
+                        {"id": "x", "nr": 1, "clip": "C009", "options": opt}):
+                with self.assertRaises(CutterError, msg=bad):
+                    review_data.alternatives(write(d, [bad]), tl, {})
+
     def test_mistakes_are_named(self):
         bad = [[{"id": "a", "nr": 9, "options": [{"clip": "C1", "in": 0, "out": 1}]}],
                [{"id": "a", "nr": 1, "options": []}],

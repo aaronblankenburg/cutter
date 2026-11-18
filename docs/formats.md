@@ -348,13 +348,15 @@ into timeline.json; the review app shows them next to the cut, where reviewers c
 
 ```json
 {"places": [
-  {"id": "arrival", "nr": 12, "reason": "Two takes of the arrival at the camp; the one in the cut is shorter.",
+  {"id": "arrival", "nr": 12, "clip": "C031", "reason": "Two takes of the arrival at the camp; the one in the cut is shorter.",
    "options": [{"clip": "C047", "in": 3.0, "out": 9.5, "why": "The car arriving, steadier picture"},
                {"clip": "C012", "in": 20.0, "out": 26.0, "why": "Wide shot with the sunset"}]}]}
 ```
 
 A place is a shot (`nr`, optionally to `nr_to`) or a time of the cut (`t`, `t_to`); `id` (letters, digits, `-`, `_`)
-is unique in the file. An option names `clip` (ID in clips.json), `in` and `out` in seconds of the clip, and `why`.
+is unique in the file. `clip` names the clip in the cut at that place: shot numbers move while a cut is planned, so
+when shot `nr` does not show `clip`, the nearest shot that does is taken (and logged); without `nr`, the one shot with
+that clip. An option names `clip` (ID in clips.json), `in` and `out` in seconds of the clip, and `why`.
 The previews (`alt-<id>-<n>.mp4`, at most 360 lines with sound, at most 30 s, and `alt-<id>-<n>.jpg`) are taken from
 the proxy of the clip if there is one, else from the clip; unchanged options are not rendered again.
 
@@ -438,7 +440,10 @@ was not found). In `alternatives`, `t`/`t_to` are the place in this cut, `curren
 `data/project.json` holds the title, reviewers, the agent's name and the UI language; an app that embeds the review
 frontend may add `"person"` (fixed reviewer name), `"submit": false` (no “Send feedback”) and `"embedded": true`
 (no brand in the header, full width; the page then posts `{source: "cutter-review", cut, open, entries}` to its parent
-window whenever the cut or its comments change). `?cut=<id>` in the page URL opens that cut.
+window whenever the cut or its comments change). Embedded on a wide frame (1000 px and more) the page fits the
+frame's height, the video getting smaller, and only the list of comments scrolls; on a narrower one it posts
+`{source: "cutter-review", height, wide: false}` so the parent can make the frame as tall as the page (`height` 0 and
+`wide: true` on a wide frame). `?cut=<id>` in the page URL opens that cut.
 
 ## Feedback export
 
