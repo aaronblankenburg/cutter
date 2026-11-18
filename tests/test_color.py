@@ -116,6 +116,29 @@ class Plan(unittest.TestCase):
         got = {nr: pl["shots"][nr]["values"].get("exposure", 0) for nr in (1, 2)}
         self.assertLess(abs(got[1] - got[2]), abs(own[1] - own[2]))
 
+    def test_switches_carry_over_to_the_next_cut(self):
+        import pathlib, sqlite3, tempfile
+        from cutter.config import Project
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            (d / "cutter.toml").write_text("[color]\nauto = true\n", encoding="utf-8")
+            db = d / ".cutter" / "review" / "data"
+            db.mkdir(parents=True)
+            con = sqlite3.connect(db / "feedback.sqlite")
+            con.execute("CREATE TABLE entries (id INTEGER PRIMARY KEY, cut TEXT, color TEXT, created TEXT, changed TEXT)")
+            con.executemany("INSERT INTO entries (cut, color, created) VALUES (?, ?, ?)",
+                            [("cut1", "7/off", "1"), ("cut1", "8/off", "2"), ("cut2", "2/on", "3")])
+            con.commit(); con.close()
+            p = Project.load(d)
+            edit = {"sections": [{"name": "A", "shots": [
+                {"nr": 1, "clip": "C001", "in": 0, "out": 4, "nr_previous": 7},
+                {"nr": 2, "clip": "C002", "in": 0, "out": 4, "nr_previous": 8},
+                {"nr": 3, "clip": "C004", "in": 0, "out": 4}]}]}
+            pl = color.for_cut(p, "cut2", edit, clips=CLIPS, log=None)
+            self.assertFalse(pl["shots"][1]["shot_on"])     # off in cut1 as shot 7
+            self.assertTrue(pl["shots"][2]["shot_on"])      # off in cut1, on again in cut2's review
+            self.assertTrue(pl["shots"][3]["shot_on"])
+
     def test_describe(self):
         self.assertEqual(color.describe({"exposure": 0.4, "temperature": -12}), "exposure +0.4, temperature -12")
 

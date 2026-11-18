@@ -22,3 +22,6 @@ phase = 0
 
 [filmcraft]
 config = "filmcraft.json"
+
+[color]
+auto = false      # the test pictures say nothing about colour; the golden outputs stay the same with or without OpenCV

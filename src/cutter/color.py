@@ -68,9 +68,13 @@ def frame_stats(rgb):
 
 
 def measure_clip(path, duration=None, step=1.0):
-    """[[t, p02, p50, p98, r, g, b, neutral], …] for one frame per `step` seconds of a video file."""
-    import cv2
-    import numpy as np
+    """[[t, p02, p50, p98, r, g, b, neutral], …] for one frame per `step` seconds of a video file; None without
+    OpenCV (the tool packages)."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return None
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
         return []
@@ -117,6 +121,10 @@ def measure(p, clip_ids=None, clips=None, log=progress):
             todo.append((cid, c, st))
     for i, (cid, c, st) in enumerate(todo, 1):
         frames = measure_clip(c["path"], c.get("duration"))
+        if frames is None:
+            if log:
+                log("Colour not measured: OpenCV is missing (it is in the Docker image)")
+            return data
         data["clips"][cid] = {"size": st.st_size, "mtime": int(st.st_mtime), "frames": frames}
         if log and (i % 20 == 0 or i == len(todo)):
             log(f"Colour measured: {i}/{len(todo)} clips")
@@ -278,10 +286,36 @@ def for_cut(p, cut, edit, clips=None, review_entries=None, log=progress):
         clips = load_clips(p)
     used = {s.get("clip") for sec in edit.get("sections", []) for s in sec.get("shots", [])}
     used |= {c.get("clip") for sec in edit.get("sections", []) for s in sec.get("shots", []) for c in s.get("cutaways") or []}
-    data = measure(p, [c for c in used if c in clips], clips, log=log)
     if review_entries is None:
+        review = inherited(p, cut, edit)
         review_entries = review_choices_of(p, cut)
-    return plan(edit, clips, data, enabled=p["color"].get("auto", True), review=choices(review_entries))
+    else:
+        review = {"all": None, "shots": {}}
+    own = choices(review_entries)
+    if own["all"] is not None:
+        review["all"] = own["all"]
+    review["shots"].update(own["shots"])
+    enabled = p["color"].get("auto", True)
+    if not enabled and not review.get("all"):          # switched off in cutter.toml (and not on in the review)
+        return plan(edit, clips, {}, enabled=False, review=review)
+    data = measure(p, [c for c in used if c in clips], clips, log=log)
+    return plan(edit, clips, data, enabled=enabled, review=review)
+
+
+def inherited(p, cut, edit):
+    """The switches of the previous cut's review, carried over to this cut: the whole film's, and a shot's to the
+    shot that came from it ("nr_previous")."""
+    from .config import previous_cut
+    prev = previous_cut(cut)
+    if not prev:
+        return {"all": None, "shots": {}}
+    old = choices(review_choices_of(p, prev))
+    shots = {}
+    for sec in edit.get("sections", []):
+        for s in sec.get("shots", []):
+            if s.get("nr_previous") in old["shots"]:
+                shots[s["nr"]] = old["shots"][s["nr_previous"]]
+    return {"all": old["all"], "shots": shots}
 
 
 def review_choices_of(p, cut):

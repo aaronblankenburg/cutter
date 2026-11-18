@@ -68,6 +68,9 @@ beats_from = "M1"               # use another cue's beats (a second excerpt of t
 [image_analysis]
 recognize_faces = false         # do not work out who is who (default: true; see people.json)
 
+[color]
+auto = true                     # a colour correction per shot, suggested from the footage (default: true; see Colour)
+
 [standins]
 sidecars = "../sidecars"        # [media] holds small stand-in copies; this folder has the originals' metadata (see below)
 
@@ -85,7 +88,7 @@ export_height = 360             # export at 360 lines (--scale 1/3 of the 1080-l
 [paths]                         # where files go; {cut} becomes the cut name. The defaults:
 # clips = "analysis/clips.json"   transcripts = "analysis/transcripts"   music_analysis = "music/music.json"
 # edit = "cuts/{cut}/edit.json"   decisions = "cuts/{cut}/decisions.json"   timeline = "cuts/{cut}/{cut}"
-# alternatives = "cuts/{cut}/alternatives.json"
+# alternatives = "cuts/{cut}/alternatives.json"   color = "analysis/color.json"
 # exports = "exports"   review = ".cutter/review/data"   htpasswd = ".cutter/review/htpasswd"
 # review_media = ""      the rendered cuts of the review app (cuts/<cut>/); empty: inside review, next to the comments
 ```
@@ -304,6 +307,7 @@ margin of the best one.
 | `free_timing` | `true`: retime leaves the shot alone |
 | `out_limits` | `[min, max]` for the out point when retiming |
 | `fade_in_s`, `stabilize` | fade-in at the start; stabilise in FilmCraft (`true`) |
+| `color` | `false`: no colour correction for this shot; `{"exposure", "temperature", "tint", "blacks"}`: these values instead of the suggestion (see Colour) |
 
 **Music cue:** `cue` (M1, M2 …), `title`, `artist`, `license`, `file` (relative to the project, or found by
 `title`/`search` in `timeline.music_dirs`), `from` and `to` (anchors), `source_start` (seconds into the track at
@@ -429,13 +433,14 @@ Optional; named by `[filmcraft] config` in cutter.toml. All keys are optional an
  "decisions": {"title", "intro", "compared_to", "date", "entries": [{"id", "title", "t", "t_to", "text", "why", "question", "refs", "kind"}]},
  "alternatives": [{"id", "nr", "nr_to", "t", "t_to", "reason", "current": {"clip", "in", "out"},
                    "options": [{"n", "clip", "in", "out", "why", "file", "poster"}]}],
+ "color": {"on", "in_video", "shots": {"<nr>": {"suggested", "on", "video", "text", "still"}}},
  "video": {"file", "width", "height", "fps", "duration", "numbers_burned_in"},
  "thumbnails": {"vtt", "interval", "width", "height", "count"}, "poster": "poster.jpg",
  "source": {"edit", "otio", "video", "video_kind", "decisions", "alternatives"}, "created": "…"}
 ```
 
 Next to it: `review.mp4` (at most 720p; an export of 720 lines or fewer keeps its size; shot numbers are burned into rough renders), `thumbs_NN.jpg` with `thumbs.vtt`, and
-`poster.jpg`, and the previews of the alternatives (`alt-<id>-<n>.mp4`/`.jpg`; `file`/`poster` are null when the clip
+`poster.jpg`, the before/after stills of the colour suggestion (`color-<nr>.jpg`), and the previews of the alternatives (`alt-<id>-<n>.mp4`/`.jpg`; `file`/`poster` are null when the clip
 was not found). In `alternatives`, `t`/`t_to` are the place in this cut, `current` is what the cut uses there.
 `data/project.json` holds the title, reviewers, the agent's name and the UI language; an app that embeds the review
 frontend may add `"person"` (fixed reviewer name), `"submit": false` (no “Send feedback”) and `"embedded": true`
@@ -444,6 +449,26 @@ window whenever the cut or its comments change). Embedded on a wide frame (1000 
 frame's height, the video getting smaller, and only the list of comments scrolls; on a narrower one it posts
 `{source: "cutter-review", height, wide: false}` so the parent can make the frame as tall as the page (`height` 0 and
 `wide: true` on a wide frame). `?cut=<id>` in the page URL opens that cut.
+
+## Colour
+
+A colour correction per shot, suggested from the footage and applied in FilmCraft (module `color`):
+
+- **Measured** once per clip (one frame per second of the analysed file; stand-ins and proxies are enough) into
+  `analysis/color.json`: `{"version": 1, "clips": {"C005": {"size", "mtime", "frames": [[t, p02, p50, p98, r, g, b,
+  neutral], …]}}}` – luma percentiles and the mean colour of the near-neutral pixels with their share.
+- **Suggested** per shot from the frames between its `in` and `out`: exposure towards a normal middle (not for night
+  pictures or pictures with bright parts), white balance from the near-neutral parts (only with enough of them, not
+  in low light, warm light cooled only half as much as a blue cast is warmed), deeper blacks for hazy pictures. Shots
+  of one camera within a section are pulled halfway towards their common value. Units of FilmCraft's Color Grading
+  effect: `exposure` in stops, `temperature` (warmer +), `tint` (magenta +), `blacks`.
+- **Applied** by `cutter filmcraft build` and `cutter export --to filmcraft` as a Color Grading effect per shot and
+  cutaway; the plan used is kept in `cuts/<cut>/work/color_plan.json`. The other export formats get a pink marker
+  per corrected shot ("Colour shot 12: exposure +0.4, temperature +12").
+- **Switched off** with `[color] auto = false`, a shot's `"color": false` in edit.json, or in the review: entries
+  with `"color": "all/off"`, `"all/on"`, `"<nr>/off"`, `"<nr>/on"` (one per reviewer and target; the latest of
+  anyone wins). The export follows these switches at once, the review video from the next build. The next cut takes
+  over the switches of the previous cut's review (a shot's by its `nr_previous`) unless its own review changes them.
 
 ## Feedback export
 

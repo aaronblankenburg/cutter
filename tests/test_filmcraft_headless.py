@@ -171,5 +171,34 @@ class FilmCraftDraft(unittest.TestCase):
         self.assertEqual(json.loads(res.stdout)["missing"], [])     # originals by absolute path, the rest relative
 
 
+    def test_colour_correction_lands_as_color_grading_effect(self):
+        """A shot's own colour values (edit.json "color") become a Color Grading effect with these values; a shot
+        switched off ("color": false) gets none."""
+        d = self.film.parent
+        film = d / "colour_film"
+        shutil.copytree(self.film, film, ignore=shutil.ignore_patterns("*.fcproj", "frame_*.png"))
+        toml = film / "cutter.toml"
+        toml.write_text(toml.read_text(encoding="utf-8").replace("auto = false", "auto = true"), encoding="utf-8")
+        edit_p = film / "cuts" / "cut1" / "edit.json"
+        edit = json.loads(edit_p.read_text(encoding="utf-8"))
+        shots = [s for sec in edit["sections"] for s in sec["shots"] if s.get("clip") != "TXT"]
+        shots[0]["color"] = {"exposure": 0.5, "temperature": 20}
+        shots[1]["color"] = False
+        edit_p.write_text(json.dumps(edit), encoding="utf-8")
+        r = golden_demo.cli("filmcraft", "build", "cut1", "--project", film)
+        self.assertIn("Colour:", "\n".join(r["log"]))
+        project = film / "cuts" / "cut1" / "cut1.fcproj"
+        seq = json.loads(subprocess.run([CLI, "--compact", "--project", str(project), "inspect", "sequence"],
+                                        capture_output=True, text=True).stdout)
+        v1 = {int(it["name"].split()[0]): it for it in seq["video"][0]["items"] if it["name"].split()[0].isdigit()}
+        grading = lambda it: next((e for e in it["effects"] if e["effect"] == "lumetri"), None)
+        g = grading(v1[shots[0]["nr"]])
+        self.assertIsNotNone(g, v1[shots[0]["nr"]]["effects"])
+        self.assertEqual(g["params"]["exposure"]["value"], "Float(0.5)")
+        self.assertEqual(g["params"]["temperature"]["value"], "Float(20.0)")
+        self.assertIsNone(grading(v1[shots[1]["nr"]]))
+        self.assertTrue((film / "cuts" / "cut1" / "work" / "color_plan.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

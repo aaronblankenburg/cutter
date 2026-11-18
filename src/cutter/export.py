@@ -263,6 +263,16 @@ def build_model(p, cut, target, relink=None):
             model["markers"].append({"name": f"Audio cleanup shot {nr}", "comment": ", ".join(what), "start": it["start"],
                                      "duration": it["end"] - it["start"], "color": "orange",
                                      "kind": "audio"})
+    # colour: the correction FilmCraft applies, as a marker for the other editing applications (the exchange formats
+    # carry no grading); empty when it is switched off
+    plan = color.for_cut(p, cut, edit, log=None)
+    for nr, cp in sorted(plan["shots"].items()):
+        it = v1_items.get(nr)
+        if it and cp.get("values"):
+            model["markers"].append({"name": f"Colour shot {nr}", "comment": f"{color.describe(cp['values'])} "
+                                     "(suggested correction, in FilmCraft's Color Grading units)",
+                                     "start": it["start"], "duration": it["end"] - it["start"], "color": "pink",
+                                     "kind": "color"})
     dec_p = p.path("decisions", cut)
     if dec_p.exists():
         for e in read_json(dec_p).get("entries", []):
