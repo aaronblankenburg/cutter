@@ -369,6 +369,7 @@ def filmcraft_project(p, cut, target, out_file, relink=None):
         stray = [m for m in filmcraft_media(out_file) if not _on_target(m, targ)]
         if stray:
             notes.append("FilmCraft refers to files that are not on the editing computer: " + ", ".join(stray[:5]))
+        relative_package_paths(out_file, targ)
         return notes
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -383,6 +384,23 @@ def filmcraft_media(project_file):
         if f.get("path"):
             out.append(f["path"])
     return out
+
+
+def relative_package_paths(project_file, targ):
+    """Media inside the package (music, maps) as paths relative to the project file, which lies in the package
+    folder: FilmCraft resolves them against the project's folder, so they are found wherever the package is
+    unpacked. The originals keep their absolute paths on the editing computer."""
+    pkg = paths.join(targ, "x", under_package=True)[:-1].replace("\\", "/")
+    data = read_json(project_file)
+    changed = False
+    for item in (data.get("project", {}).get("items") or {}).values():
+        f = ((item.get("kind") or {}).get("Media") or {}).get("media", {}).get("File") or {}
+        path = (f.get("path") or "").replace("\\", "/")
+        if path.startswith(pkg):
+            f["path"] = path[len(pkg):]
+            changed = True
+    if changed:
+        pathlib.Path(project_file).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 def _on_target(path, targ):

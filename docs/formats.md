@@ -393,7 +393,7 @@ size. `--relink` maps old to new `rel_path`s of originals renamed since the anal
 |---|---|---|
 | `premiere` | `.xml`, FCP 7 XML (xmeml 4, `fcp7.py`) | picture size (Basic Motion), dialogue levels, music ducking as volume keyframes, titles as PNG with opacity keyframes; stabilisation, audio cleanup and the decisions of decisions.json as sequence markers |
 | `fcp`, `resolve` | `.fcpxml`, FCPXML 1.10 (`fcpxml.py`, checked against Apple's DTD) | the same, plus stabilisation (`adjust-stabilization`) and noise reduction (`adjust-noiseReduction`) applied, subtitles as captions; markers sit on the clip they start in |
-| `filmcraft` | `.fcproj` | the project `cutter filmcraft build` makes (titles, credits, map, audio chain, stabilisation, ducking, captions), built from a timeline that points to the originals; FilmCraft keeps the paths of the media that are offline on the server and finds them on the editing computer |
+| `filmcraft` | `.fcproj` | the project `cutter filmcraft build` makes (titles, credits, map, audio chain, stabilisation, ducking, captions), built from a timeline that points to the originals; FilmCraft keeps the paths of the media that are offline on the server and finds them on the editing computer; the files in the package (music, maps) are referred to relative to the project file, so they are found wherever the package is unpacked |
 
 DaVinci Resolve gets FCPXML rather than FCP 7 XML or OTIO: it keeps start timecode, frame rates, volume keyframes,
 markers with notes and captions, and Resolve's FCPXML import is the one Blackmagic maintains for round trips with

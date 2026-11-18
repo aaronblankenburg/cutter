@@ -75,13 +75,16 @@ class FilmCraftHeadless(unittest.TestCase):
                                   "windows", "--target-root", "D:\\Videos\\Demo", "--out", d / "win")
         from cutter import export
         media = export.filmcraft_media(d / "win" / windows["timeline"])
-        self.assertTrue(media and all(m.startswith("D:/Videos/Demo/") for m in media), media)
+        originals = [m for m in media if not m.startswith(("music/", "maps/"))]
+        self.assertTrue(originals and all(m.startswith("D:/Videos/Demo/") for m in originals), media)
+        self.assertTrue(any(m.startswith("music/") for m in media), "package files relative to the project")
         self.assertEqual(windows["notes"], [])
 
         r = golden_demo.cli("export", "cut1", "--project", self.film, "--to", "filmcraft", "--target-os", "linux",
                             "--target-root", d, "--out", d / "_cutlery")
         exported = d / "_cutlery" / r["timeline"]
-        self.assertTrue(all(m.startswith(str(d) + "/") for m in export.filmcraft_media(exported)))
+        media = export.filmcraft_media(exported)
+        self.assertTrue(all(m.startswith(str(d) + "/") or m.startswith(("music/", "maps/")) for m in media), media)
         names = json.loads(subprocess.run([CLI, "--compact", "--project", str(exported), "inspect", "project"],
                                           capture_output=True, text=True).stdout)["root"]["children"]
         self.assertFalse([c["name"] for c in names if "%" in c["name"]])
@@ -151,6 +154,21 @@ class FilmCraftDraft(unittest.TestCase):
                                    capture_output=True, text=True)
                 ssim = float(r.stderr.rsplit("All:", 1)[1].split()[0])     # small: the proxies have 360 lines
                 self.assertGreater(ssim, 0.85, f"draft and film differ at {t} s")
+
+    def test_package_files_are_found_wherever_the_package_is_unpacked(self):
+        d = self.film.parent
+        r = golden_demo.cli("export", "cut1", "--project", self.film, "--to", "filmcraft", "--target-os", "linux",
+                            "--target-root", d, "--out", d / "pkg")
+        moved = d / "elsewhere" / "pkg"
+        moved.parent.mkdir()
+        shutil.move(str(d / "pkg"), moved)
+        res = subprocess.run([CLI, "--compact", "--project", str(moved / r["timeline"]), "exec", "media.findMissing"],
+                             capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        from cutter import export
+        media = export.filmcraft_media(moved / r["timeline"])
+        self.assertTrue(any(m.startswith("music/") for m in media), media)
+        self.assertEqual(json.loads(res.stdout)["missing"], [])     # originals by absolute path, the rest relative
 
 
 if __name__ == "__main__":
