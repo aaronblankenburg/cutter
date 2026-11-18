@@ -208,6 +208,15 @@ select, input[type="text"], textarea {
 .alt-option button { justify-self: start; min-height: 32px; padding: 3px 10px; font-size: 13px; }
 .alt-keep { margin-top: 8px; min-height: 32px; padding: 3px 10px; font-size: 13px; }
 .entry .alt-info { display: block; color: #2dd4bf; font-size: 13px; margin-top: 2px; }
+.entry .color-info { display: block; color: #f0a8d0; font-size: 13px; margin-top: 2px; }
+.info-color { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; }
+.color-head b { color: #f0a8d0; margin-right: 4px; }
+.color-head span { color: #c9d0d9; font-variant-numeric: tabular-nums; }
+#color-still { display: block; width: 100%; max-width: 488px; margin-top: 8px; border-radius: 6px; }
+#color-still[hidden] { display: none; }
+.color-state { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.color-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.color-buttons button { min-height: 32px; padding: 3px 10px; font-size: 13px; }
 .tl-text .tl-alt { color: #2dd4bf; display: block; margin-top: 2px; }
 
 /* embedded in another app's page (app.embedded): no brand, the frame's full width */

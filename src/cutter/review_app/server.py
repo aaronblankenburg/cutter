@@ -24,7 +24,9 @@ its page URL (index.html?cut=cut2) when that cut exists. With "embedded" it post
 open, entries} to its parent window (same origin) whenever the selected cut or its entries change.
 Entries about the whole film have no moment ("t": null). "alternative": "<place id>/<option>" or "<place id>/keep"
 records a choice among the alternatives of the cut (timeline.json "alternatives"); one per reviewer and place:
-choosing again changes the earlier entry.
+choosing again changes the earlier entry. "color": "all/off", "all/on", "<nr>/off" or "<nr>/on" switches the colour
+correction (timeline.json "color") off or on for the whole cut or one shot; also one per reviewer and target. Such an
+entry needs no action, reaction or text.
 Data written by the earlier German version (data/fassungen/, table "eintraege", German timeline.json keys) is read
 transparently; an old database is migrated once at start-up after a backup copy is made next to it.
 """
@@ -63,6 +65,7 @@ EDIT_ACTIONS = {"cut_earlier", "cut_later"}
 
 CUT_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,80}$")
+COLOR_RE = re.compile(r"^(all|[1-9][0-9]{0,4})/(on|off)$")                   # colour correction switched on/off
 ALTERNATIVE_RE = re.compile(r"^([A-Za-z0-9_-]{1,40})/(keep|[1-9])$")    # "<place id>/<option number>" or "<place id>/keep"
 TYPES = {
     ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -97,7 +100,8 @@ CREATE TABLE IF NOT EXISTS entries (
     reply TEXT,
     created TEXT NOT NULL,
     changed TEXT,
-    alternative TEXT
+    alternative TEXT,
+    color TEXT
 );
 CREATE INDEX IF NOT EXISTS entries_cut ON entries (cut, t);
 CREATE TABLE IF NOT EXISTS requests (
@@ -178,6 +182,9 @@ def migrate_general_entries(db):
     cols = {r[1]: r for r in db.execute("PRAGMA table_info(entries)")}
     if "alternative" not in cols:                     # 0.5.0: the choice among a place's alternatives
         db.execute("ALTER TABLE entries ADD COLUMN alternative TEXT")
+        cols = {r[1]: r for r in db.execute("PRAGMA table_info(entries)")}
+    if "color" not in cols:                           # 0.6.0: colour correction switched on/off
+        db.execute("ALTER TABLE entries ADD COLUMN color TEXT")
         cols = {r[1]: r for r in db.execute("PRAGMA table_info(entries)")}
     if not cols["t"][3]:
         return False
@@ -515,7 +522,7 @@ class Store:
     def _values(self, e):
         return {k: (json.dumps(e[k], ensure_ascii=False) if k in JSON_FIELDS and e.get(k) is not None else e.get(k))
                 for k in ("cut", "t", "t_to", "nr", "nr_to", "clip", "source_t", "cutaway", "section",
-                          "music", "edit_point", "action", "reaction", "text", "person", "alternative")}
+                          "music", "edit_point", "action", "reaction", "text", "person", "alternative", "color")}
 
     def new(self, e):
         w = self._values(e)
@@ -567,10 +574,12 @@ class Store:
                 self.db.execute("INSERT INTO requests (cut, person, created) VALUES (?, ?, ?)", (cut, person, now()))
         return self.request(cut), not r
 
-    def own_choice(self, cut, person, place):
-        """The id of the person's entry that chose among the alternatives of this place, or None."""
+    def own_choice(self, cut, person, place, column="alternative"):
+        """The id of the person's entry that chose among the alternatives of this place (column "alternative") or
+        switched the colour of this target (column "color"), or None."""
+        assert column in ("alternative", "color")
         with self.lock:
-            r = self.db.execute("SELECT id FROM entries WHERE cut = ? AND lower(person) = lower(?) AND alternative LIKE ? "
+            r = self.db.execute(f"SELECT id FROM entries WHERE cut = ? AND lower(person) = lower(?) AND {column} LIKE ? "
                                 "ORDER BY id DESC LIMIT 1", (cut, person, place + "/%")).fetchone()
         return r[0] if r else None
 
@@ -595,7 +604,7 @@ def export_data(cut, tl, entries):
         people[e["person"]] = people.get(e["person"], 0) + 1
     counts = {s: sum(1 for e in entries if e["status"] == s) for s in STATUSES}
     fields = ("id", "t", "t_to", "nr", "nr_to", "clip", "source_t", "cutaway", "section", "music", "edit_point",
-              "action", "action_text", "text", "reaction", "alternative", "person", "status", "reply", "created", "changed")
+              "action", "action_text", "text", "reaction", "alternative", "color", "person", "status", "reply", "created", "changed")
     return {"format": 2, "cut": cut, "title": tl.d.get("title"), "duration": tl.duration,
             "source": tl.d.get("source"), "exported": now(),
             "people": [{"name": n, "entries": k} for n, k in sorted(people.items())],
@@ -644,6 +653,9 @@ def entry_line(e, when):
         extra.append(f"in cutaway {e['cutaway']['clip']} @ {time_text(e['cutaway']['source_t'])}")
     if e.get("alternative"):
         extra.append(f"alternative {e['alternative']}")
+    if e.get("color"):
+        what_, _, state = e["color"].partition("/")
+        extra.append(f"colour correction {state} for {'the whole cut' if what_ == 'all' else 'shot ' + what_}")
     if e.get("music") and e.get("action") in ("music_softer", "music_louder"):
         extra.append(f"music {e['music']['cue']} @ {time_text(e['music']['t_track'])}")
     content = " ".join(x for x in (what, f"“{e['text']}”" if e.get("text") else "") if x)
@@ -886,8 +898,9 @@ class Handler(BaseHTTPRequestHandler):
         return round(float(value), 3)
 
     @staticmethod
-    def content(d, e):
-        """Check action, reaction, text and copy them into e (only keys that are present)."""
+    def content(d, e, optional=False):
+        """Check action, reaction, text and copy them into e (only keys that are present). optional: an entry that
+        says something by itself (a colour switch) needs none of them."""
         if "action" in d:
             if d["action"] not in (None, "") and d["action"] not in ACTIONS:
                 raise ApiError(400, "Unknown action")
@@ -900,8 +913,18 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(d["text"], str) or len(d["text"]) > 2000:
                 raise ApiError(400, "Text missing or too long (at most 2000 characters)")
             e["text"] = d["text"].strip()
-        if not (e.get("action") or e.get("reaction") or e.get("text")):
+        if not (optional or e.get("action") or e.get("reaction") or e.get("text")):
             raise ApiError(400, "Give an action, a reaction or a text")
+
+    @staticmethod
+    def color(value, tl):
+        """Check "all/on|off" or "<nr>/on|off" against the shots of the cut; None or "" clears it."""
+        if value in (None, ""):
+            return None
+        m = COLOR_RE.match(value) if isinstance(value, str) else None
+        if not m or (m.group(1) != "all" and int(m.group(1)) not in {s.get("nr") for s in tl.shots}):
+            raise ApiError(400, 'color: "all/on", "all/off", "<shot nr>/on" or "<shot nr>/off" of this cut expected')
+        return value
 
     @staticmethod
     def alternative(value, tl):
@@ -953,14 +976,16 @@ class Handler(BaseHTTPRequestHandler):
                 d = self.read_json()
                 tl = self.cut(d.get("cut"))
                 e = {"cut": d["cut"], "person": self.person(d.get("person")), "action": None, "reaction": None, "text": ""}
-                self.content(d, e)
+                e["color"] = self.color(d.get("color"), tl)
+                self.content(d, e, optional=bool(e["color"]))
                 e["alternative"] = self.alternative(d.get("alternative"), tl)
                 e["t"] = self.number(d.get("t"), "t", tl, empty=True)          # None: a general entry (whole film)
                 e["t_to"] = self.number(d.get("t_to"), "t_to", tl, empty=True)
                 if e["t_to"] is not None and (e["t"] is None or e["t_to"] <= e["t"]):
                     e["t_to"] = None
                 tl.enrich(e, d.get("edit_t"))
-                mine = e["alternative"] and store.own_choice(e["cut"], e["person"], e["alternative"].split("/")[0])
+                mine = (e["alternative"] and store.own_choice(e["cut"], e["person"], e["alternative"].split("/")[0])) \
+                    or (e["color"] and store.own_choice(e["cut"], e["person"], e["color"].split("/")[0], "color"))
                 if mine:                                   # choosing again changes the earlier choice
                     return self.send_json({"rev": store.rev(), "entry": store.change(mine, e)})
                 return self.send_json({"rev": store.rev(), "entry": store.new(e)}, 201)
@@ -979,7 +1004,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json({"rev": store.rev(), "deleted": eid})
                 tl = self.cut(old["cut"])
                 e = dict(old)
-                self.content(d, e)
+                if "color" in d:
+                    e["color"] = self.color(d["color"], tl)
+                self.content(d, e, optional=bool(e.get("color")))
                 if "alternative" in d:
                     e["alternative"] = self.alternative(d["alternative"], tl)
                 if "t" in d:

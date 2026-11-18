@@ -287,16 +287,18 @@ def c_filmcraft(a, out):
         cl = client(base, project_file)
         from . import color
         edit = read_json(edit_p)
+        plan = color.for_cut(p, cut, edit, log=out.info)
         r = filmcraft.finish(cl, fc, edit, xml, srt, p.path("work", cut) / "filmcraft_batch.jsonl", base=p.media_base,
                              backup=(p.path("work", cut) / "backup_before_build.fcproj") if bridge is not None else None,
                              music_analysis=music_analysis, retime_cues=p["retime"].get("cues"), execute=not a.dry_run,
-                             color_plan=color.for_cut(p, cut, edit, log=out.info))
+                             color_plan=plan)
         r["mode"] = "dry-run" if a.dry_run else ("bridge" if bridge is not None else "headless")
         r["media"] = _timeline_media(p, cut)
         if r["media"] == "proxies":
             r["log"].append("Draft: the project plays the proxies")
         if not a.dry_run:
             write_json(p.path("work", cut) / "filmcraft_media.json", {"media": r["media"]})
+            write_json(p.path("work", cut) / "color_plan.json", plan)     # what the project (and its export) shows
         if bridge is None and not a.dry_run:
             r["project"] = str(project_file)
         return out.result(r, "\n".join(r["log"]) + (f"\n-> {project_file}" if r.get("project") else ""))
@@ -378,11 +380,19 @@ def c_review_data(a, out):
                           "decisions": str(dec) if dec.exists() else None, "alternatives": str(alt) if alt.exists() else None},
                     f"  {edit} + {otio}" + (f" + {dec}" if dec.exists() else "") + f"\n  video: {video or 'rough render'}\n  -> {target / cut}")
     os.environ["CUTTER_JSON"] = "1" if out.as_json else ""
+    from . import color
+    plan = in_video = None
+    if p["color"].get("auto", True) and p.path("clips").exists():
+        plan = color.for_cut(p, cut, read_json(edit), log=out.info)
+        used = p.path("work", cut) / "color_plan.json"
+        if video and used.exists() and a.video is None:   # the FilmCraft export of this cut: made with that plan
+            in_video = {"shots": {int(k): v for k, v in read_json(used).get("shots", {}).items()}}
     r = review_data.create(cut, edit, otio, target, p.path("transcripts"), video=video, decisions_path=dec if dec.exists() else None,
                            numbers_in_export=a.numbers, no_numbers=a.no_numbers, timeline_only=a.timeline_only, jobs=a.jobs,
                            ns=p.otio_namespace, external=p.external_clip_ids(), fade_out=p["music"]["fade_out_s"],
                            height=int(p["filmcraft"].get("export_height") or 0) or None,
-                           alternatives_path=alt if alt.exists() else None, clip_paths=_clip_paths(p) if alt.exists() else None,
+                           alternatives_path=alt if alt.exists() else None,
+                           clip_paths=_clip_paths(p) if alt.exists() or plan else None, color_plan=plan, color_in_video=in_video,
                            levels={"base": p["music"]["base_lufs"], "under": p["music"]["under_dialogue_lufs"], "low": p["music"]["low_lufs"]})
     from .deploy import write_app_config
     write_app_config(p, p.path("review"))

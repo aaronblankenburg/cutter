@@ -619,12 +619,65 @@ def thumbnails(video, folder, duration):
     return count
 
 
+def color_block(plan, in_video, edit, clip_paths, folder):
+    """timeline.json "color": {"on", "in_video", "shots": {nr: {"suggested", "on", "video", "text", "still"}}}.
+    "on" of the cut: the whole film's switch; "on" of a shot: the shot's own switch.
+    "video": the values the review video was made with; "still": a picture with the shot's middle frame before
+    (left) and after (right) the suggestion, made with color.apply_preview."""
+    from . import color
+    shots = {s["nr"]: s for sec in edit.get("sections", []) for s in sec.get("shots", [])}
+    video_shots = ((in_video or {}).get("shots") or {})
+    for old in folder.glob("color-*.jpg"):
+        old.unlink()
+    out = {"on": bool(plan.get("on")), "in_video": in_video is not None, "shots": {}}
+    for nr, sp in sorted((plan.get("shots") or {}).items()):
+        if not sp.get("suggested"):
+            continue
+        vid = video_shots.get(nr) or video_shots.get(str(nr)) or {}
+        entry = {"suggested": sp["suggested"], "on": bool(sp.get("shot_on", sp.get("on"))), "video": vid.get("values") or {},
+                 "text": color.describe(sp["suggested"]), "still": None}
+        s = shots.get(nr) or {}
+        src = clip_paths.get(s.get("clip"))
+        if src:
+            name = f"color-{nr}.jpg"
+            if color_still(src, (s.get("in", 0) + s.get("out", s.get("in", 0))) / 2, sp["suggested"], folder / name):
+                entry["still"] = name
+        out["shots"][str(nr)] = entry
+    return out
+
+
+def color_still(src, t, values, target, width=240):
+    """Before | after of one frame of src at t seconds; False when the frame cannot be read."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return False
+    from . import color
+    cap = cv2.VideoCapture(str(src))
+    try:
+        cap.set(cv2.CAP_PROP_POS_MSEC, max(0.0, t) * 1000)
+        ok, bgr = cap.read()
+    finally:
+        cap.release()
+    if not ok:
+        return False
+    h = max(2, round(width * bgr.shape[0] / bgr.shape[1]))
+    bgr = cv2.resize(bgr, (width, h), interpolation=cv2.INTER_AREA)
+    after = (color.apply_preview(bgr[..., ::-1].astype(np.float32) / 255, values) * 255 + 0.5).astype(np.uint8)[..., ::-1]
+    gap = np.full((h, 4, 3), 20, np.uint8)
+    return bool(cv2.imwrite(str(target), np.hstack([bgr, gap, after]), [cv2.IMWRITE_JPEG_QUALITY, 85]))
+
+
 def create(version, edit_path, otio_path, target, transcripts, video=None, decisions_path=None, numbers_in_export=False,
            no_numbers=False, timeline_only=False, jobs=None, ns="cutter", external=("TXT",), fade_out=None, levels=None,
-           height=None, alternatives_path=None, clip_paths=None):
+           height=None, alternatives_path=None, clip_paths=None, color_plan=None, color_in_video=None):
     """Write the review data of one version. decisions_path: changes and decisions (None = none). height: lines of a
     rough render below 720 (e.g. 360 when the clips are 360p stand-ins). alternatives_path: the agent's alternatives
-    (None = none), rendered as previews from clip_paths {clip ID: file}. Returns a report."""
+    (None = none), rendered as previews from clip_paths {clip ID: file}. color_plan: color.plan() of the cut as it
+    stands now (review choices included), color_in_video: the plan the video was made with (None: the video has no
+    colour correction); both go into timeline.json "color" with a before/after still per corrected shot.
+    Returns a report."""
     if not VERSION_RE.fullmatch(version):
         raise CutterError("Cut names use letters, digits, - and _ (for example cut4)", 2)
     edit_path, otio_path, target = pathlib.Path(edit_path), pathlib.Path(otio_path), pathlib.Path(target)
@@ -669,6 +722,9 @@ def create(version, edit_path, otio_path, target, transcripts, video=None, decis
         log(f"  {len(tl['alternatives'])} places with alternatives, {n} previews")
     else:
         alternative_previews([], folder)
+    if color_plan is not None:
+        tl["color"] = color_block(color_plan, color_in_video, edit, clip_paths or {}, folder)
+        log(f"  colour: {sum(1 for x in tl['color']['shots'].values() if x['suggested'])} shots with a suggestion")
     if timeline_only:
         if old_tl.exists():
             from .legacy import timeline_from_legacy

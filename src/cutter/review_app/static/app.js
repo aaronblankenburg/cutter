@@ -308,6 +308,7 @@
     Object.assign(S, { notesData: dec, notes: dec ? dec.entries : [], noteSelected: null, nowKey: '' });
     S.alts = Array.isArray(tl.alternatives) ? tl.alternatives : [];
     S.altKey = '';
+    S.color = tl.color && tl.color.shots ? tl.color : null;
     const ab = $('#alts-button');
     ab.hidden = !S.alts.length;
     ab.textContent = t('alt_places', { n: S.alts.length });
@@ -383,7 +384,8 @@
     else if (status.length) message(t(status.length === 1 ? 'status_changed_one' : 'status_changed', { n: status.length, status: statusText(status[0].status) }));
   }
   function describe(e) {
-    return [e.action ? actionText(e.action) : '', e.reaction || '', e.text ? t('quoted', { text: e.text }) : ''].filter(Boolean).join(' ');
+    return [e.action ? actionText(e.action) : '', e.reaction || '', e.text ? t('quoted', { text: e.text }) : '',
+      e.color ? colorChoiceText(e.color) : ''].filter(Boolean).join(' ');
   }
   function connection(ok) {
     const v = $('#connection');
@@ -704,6 +706,7 @@
     if (e.text) line.append(document.createTextNode(e.text));
     content.append(line);
     if (e.alternative) content.append(el('span', 'alt-info', altChoiceText(e.alternative)));
+    if (e.color) content.append(el('span', 'color-info', colorChoiceText(e.color)));
     if (e.edit_point) content.append(el('span', 'cut-info', t('edit_at', { edit: editText(e.edit_point), t: short(e.edit_point.t) })));
     const tools = el('div', 'tools');
     if (own(e)) tools.append(button('✎', t('change'), () => edit(e)), button('🗑', t('delete'), () => remove(e, false)));
@@ -889,7 +892,7 @@
     showNow(x, notes);
     showAlternatives(altsAt(x));
     follow();
-    const key = [S.f, LANG, s.nr, sz && sz.start, sub && sub.start, m && m.cue, cw && cw.start, c && c.t, !!S.loop,
+    const key = [S.f, LANG, s.nr, colorKey(s), sz && sz.start, sub && sub.start, m && m.cue, cw && cw.start, c && c.t, !!S.loop,
       notes.map((d) => d.id).join(',')].join('|');
     if (key === S.infoKey) return;
     S.infoKey = key;
@@ -916,6 +919,7 @@
     }
     if (sub) sentence.append(el('span', 'sub', t('subtitle', { text: sub.text.replace(/\n/g, ' / ') })));
     $('#info-note').textContent = s.note || '';
+    showColor(s);
     markNotes(notes);
     if (S.lastNr !== s.nr) {
       S.lastNr = s.nr;
@@ -1183,6 +1187,77 @@
       S.altKey = '';
       personFilter(); list(); info(); draw();
       message(o ? t('alt_saved', { n: o.n }) : t('alt_kept_saved'));
+    } catch (e) { message(t('not_saved', { msg: e.message }), { error: true }); }
+  }
+
+  // ------------------------------------------------------------ colour correction
+  // timeline.json "color": the suggestion per shot (with a before/after still) and whether it is on. Switching it
+  // off or on is a comment ("<nr>/off", "all/on" …; one per reviewer and target). The latest switch of anyone wins,
+  // as in the export and the next cut.
+  const COLOR_NAMES = ['exposure', 'temperature', 'tint', 'blacks'];
+  function colorChoiceText(ref) {
+    const [what, state] = String(ref).split('/');
+    return t(what === 'all' ? `color_all_${state}` : `color_shot_${state}`, { nr: what });
+  }
+  function colorValues(v) {
+    return COLOR_NAMES.filter((k) => v && v[k] != null)
+      .map((k) => `${t('color_' + k)} ${v[k] > 0 ? '+' : ''}${v[k].toLocaleString(LANG)}`).join(' · ');
+  }
+  function colorSwitches() {
+    const last = new Map();
+    const order = (e) => e.changed || e.created || '';
+    const later = (a, b) => order(a).localeCompare(order(b)) || a.id - b.id;     // same second: the later entry
+    for (const e of [...S.entries].filter((x) => x.color).sort(later)) {
+      const [what, state] = e.color.split('/');
+      last.set(what, state === 'on');
+    }
+    return last;
+  }
+  function colorState(nr) {
+    const sw = colorSwitches(), c = S.color, shot = c && c.shots[String(nr)];
+    const film = sw.has('all') ? sw.get('all') : !!c.on;
+    const own = sw.has(String(nr)) ? sw.get(String(nr)) : !!(shot && shot.on);
+    return { film, own, on: film && own };
+  }
+  function colorKey(s) {
+    if (!S.color || !S.color.shots[String(s.nr)]) return '';
+    const st = colorState(s.nr);
+    return `${st.film}${st.own}`;
+  }
+  function showColor(s) {
+    const box = $('#info-color'), shot = S.color && S.color.shots[String(s.nr)];
+    box.hidden = !shot;
+    if (!shot) return;
+    const st = colorState(s.nr);
+    $('#color-values').textContent = colorValues(shot.suggested);
+    const img = $('#color-still');
+    img.hidden = !shot.still;
+    if (shot.still) {
+      img.src = `media/${encodeURIComponent(S.f)}/${shot.still}`;
+      img.alt = t('color_still');
+      img.title = t('color_still');
+    }
+    const inVideo = S.color.in_video && Object.keys(shot.video || {}).length > 0;
+    let state = st.on ? t('color_on') : (st.film ? t('color_shot_is_off') : t('color_film_is_off'));
+    if (S.color.in_video && inVideo !== st.on) state += ' ' + t('color_video_differs');
+    else if (!S.color.in_video) state += ' ' + t('color_not_in_video');
+    $('#color-state').textContent = state;
+    const bs = $('#color-shot'), ba = $('#color-all');
+    bs.textContent = st.own ? t('color_shot_off_button', { nr: s.nr }) : t('color_shot_on_button', { nr: s.nr });
+    bs.onclick = (ev) => { ev.currentTarget.blur(); switchColor(String(s.nr), !st.own, s); };
+    ba.textContent = st.film ? t('color_all_off_button') : t('color_all_on_button');
+    ba.onclick = (ev) => { ev.currentTarget.blur(); switchColor('all', !st.film, s); };
+  }
+  async function switchColor(what, on, s) {
+    if (!S.name && !(await askName())) return;
+    const body = { cut: S.f, t: what === 'all' ? null : r3(s.start + 0.01), person: S.name, color: `${what}/${on ? 'on' : 'off'}` };
+    try {
+      const r = await api('POST', 'api/entries', body);
+      S.entries = S.entries.filter((x) => x.id !== r.entry.id);
+      S.entries.push(r.entry); S.entries.sort(byTime);
+      S.infoKey = '';
+      personFilter(); list(); info(); draw();
+      message(colorChoiceText(r.entry.color));
     } catch (e) { message(t('not_saved', { msg: e.message }), { error: true }); }
   }
 

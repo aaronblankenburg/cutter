@@ -216,7 +216,8 @@ def choices(entries):
     """The colour choices of the review: {"all": bool|None, "shots": {nr: bool}}, the latest entry winning.
     entries: dicts with "color" ("all/off", "all/on", "<nr>/off", "<nr>/on") and "changed"/"created"."""
     out = {"all": None, "shots": {}}
-    for e in sorted((e for e in entries if e.get("color")), key=lambda e: (e.get("changed") or e.get("created") or "")):
+    for e in sorted((e for e in entries if e.get("color")),
+                    key=lambda e: (e.get("changed") or e.get("created") or "", e.get("id") or 0)):
         what, _, state = str(e["color"]).partition("/")
         on = state == "on"
         if what == "all":
@@ -227,8 +228,9 @@ def choices(entries):
 
 
 def plan(edit, clips, data, enabled=True, review=None):
-    """{"shots": {nr: {"suggested": {…}, "values": {…}, "on": bool, "cutaways": [{…values…}]}}, "on": bool}.
-    values: what goes into the film (empty when switched off or nothing to correct)."""
+    """{"shots": {nr: {"suggested": {…}, "values": {…}, "on": bool, "shot_on": bool, "cutaways": [{…values…}]}},
+    "on": bool}. values: what goes into the film (empty when switched off or nothing to correct); on: the shot is
+    corrected; shot_on: the shot itself is not switched off (whatever the whole film's switch says)."""
     review = review or {"all": None, "shots": {}}
     film_on = enabled if review.get("all") is None else review["all"]
     measured = (data or {}).get("clips") or {}
@@ -263,7 +265,8 @@ def plan(edit, clips, data, enabled=True, review=None):
             suggested = tidy(own)
         values = suggested if on else {}
         cut = [tidy(raw(c.get("clip"), c.get("in"), c.get("out"))) if on else {} for c in s.get("cutaways") or []]
-        out[nr] = {"suggested": suggested, "values": values, "on": bool(on), "cutaways": cut}
+        shot_on = own is not False and review["shots"].get(nr, True)
+        out[nr] = {"suggested": suggested, "values": values, "on": bool(on), "shot_on": bool(shot_on), "cutaways": cut}
     return {"on": bool(film_on), "shots": out}
 
 
@@ -293,13 +296,13 @@ def review_choices_of(p, cut):
             cols = {r[1] for r in con.execute("PRAGMA table_info(entries)")}
             if "color" not in cols:
                 return []
-            rows = con.execute("SELECT color, created, changed FROM entries WHERE cut = ? AND color IS NOT NULL "
-                               "AND (status IS NULL OR status != 'deleted')", (cut,)).fetchall()
+            rows = con.execute("SELECT color, created, changed, id FROM entries WHERE cut = ? AND color IS NOT NULL",
+                               (cut,)).fetchall()
         finally:
             con.close()
     except sqlite3.Error:
         return []
-    return [{"color": r[0], "created": r[1], "changed": r[2]} for r in rows]
+    return [{"color": r[0], "created": r[1], "changed": r[2], "id": r[3]} for r in rows]
 
 
 # ---------------------------------------------------------------- preview

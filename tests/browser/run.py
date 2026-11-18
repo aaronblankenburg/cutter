@@ -32,7 +32,7 @@ REPO = HERE.parents[1]
 SERVER = REPO / "src" / "cutter" / "review_app" / "server.py"
 HOST, PORTS, LOGIN = "127.0.0.1", range(8295, 8300), "tester"
 RUNS = [("test_app.js", "en"), ("test_comments.js", "en"), ("test_new_cut.js", "en"), ("test_decisions.js", "en"),
-        ("test_alternatives.js", "en"), ("test_width.js", "en"), ("test_smoke_de.js", "de"), ("test_width.js", "de")]
+        ("test_alternatives.js", "en"), ("test_color.js", "en"), ("test_width.js", "en"), ("test_smoke_de.js", "de"), ("test_width.js", "de")]
 EMBEDDING_KEYS = ("person", "submit", "embedded")      # set by test_alternatives.js, never left for the next file
 TEST_TIMEOUT = 900
 

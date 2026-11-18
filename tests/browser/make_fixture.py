@@ -335,6 +335,22 @@ def add_alternatives(tl, folder, work):
     tl["source"]["alternatives"] = path.name
 
 
+# test_color.js: in cut6 a colour suggestion for the shots at COLOR_AT (on, in the video) and COLOR_OFF_AT (switched
+# off in the edit list)
+COLOR_AT, COLOR_OFF_AT = 100.0, 120.0
+
+
+def add_color(tl, folder, work):
+    a, b = shot_at(tl, COLOR_AT), shot_at(tl, COLOR_OFF_AT)
+    plan = {"on": True, "shots": {
+        a["nr"]: {"suggested": {"exposure": 0.4, "temperature": 12}, "values": {"exposure": 0.4, "temperature": 12},
+                  "on": True, "shot_on": True, "cutaways": []},
+        b["nr"]: {"suggested": {"blacks": -15}, "values": {}, "on": False, "shot_on": False, "cutaways": []}}}
+    edit = {"sections": [{"name": "x", "shots": [{"nr": a["nr"], "clip": "C900", "in": 1.0, "out": 4.0},
+                                                {"nr": b["nr"], "clip": "C900", "in": 4.0, "out": 7.0}]}]}
+    tl["color"] = review_data.color_block(plan, plan, edit, {"C900": str(work / "C900.mp4")}, folder)
+
+
 # ---------------------------------------------------------------- video
 
 def render(name, tl, folder, work):
@@ -403,6 +419,7 @@ def main():
         folder.mkdir(parents=True, exist_ok=True)
         if name == "cut6":
             add_alternatives(tls[name], folder, work)
+            add_color(tls[name], folder, work)
         return render(name, tls[name], folder, work)
     with ThreadPoolExecutor(max_workers=len(CUTS)) as ex:
         durations = dict(zip(CUTS, ex.map(one, CUTS)))
