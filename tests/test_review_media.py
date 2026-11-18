@@ -14,6 +14,12 @@ class ReviewMedia(unittest.TestCase):
             p = Project(d, {"paths": {"review": "/elsewhere/review"}})
             self.assertEqual(p.path("review_media"), pathlib.Path("/elsewhere/review"))
 
+    def test_app_config_for_an_embedding_app(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertNotIn("embedded", Project(d, {}).app_config())
+            c = Project(d, {"review": {"person": "Host User", "submit": False, "embedded": True}}).app_config()
+            self.assertEqual((c["person"], c["submit"], c["embedded"]), ("Host User", False, True))
+
     def test_own_folder(self):
         with tempfile.TemporaryDirectory() as d:
             p = Project(d, {"paths": {"review_media": "/work/p1/review"}})
