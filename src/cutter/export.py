@@ -25,7 +25,7 @@ import shutil
 from fractions import Fraction
 from urllib.parse import unquote, urlsplit
 
-from . import filmcraft, paths, timeline, titles
+from . import color, filmcraft, paths, timeline, titles
 from .legacy import otio_meta_in
 from .util import CutterError, MISSING, read_json
 
@@ -362,9 +362,11 @@ def filmcraft_project(p, cut, target, out_file, relink=None):
         client = filmcraft.CliClient(filmcraft.find_cli(), target=out_file, data_dir=work / "filmcraft-data")
         music_analysis = read_json(p.path("music_analysis")) if p.path("music_analysis").exists() else None
         srt = work / "timeline.srt"
-        r = filmcraft.finish(client, filmcraft.project_config(p), read_json(edit_p), work / "timeline.fcp7.xml",
+        edit = read_json(edit_p)
+        r = filmcraft.finish(client, filmcraft.project_config(p), edit, work / "timeline.fcp7.xml",
                              srt if srt.exists() else None, work / "filmcraft_batch.jsonl", base=p.media_base,
-                             music_analysis=music_analysis, retime_cues=p["retime"].get("cues"))
+                             music_analysis=music_analysis, retime_cues=p["retime"].get("cues"),
+                             color_plan=color.for_cut(p, cut, edit, log=None))
         notes = [x for x in r.get("log", []) if "error" in str(x).lower()]
         stray = [m for m in filmcraft_media(out_file) if not _on_target(m, targ)]
         if stray:

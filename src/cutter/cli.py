@@ -285,9 +285,12 @@ def c_filmcraft(a, out):
                 raise CutterError(f"The project file exists already: {project_file}", MISSING, "--overwrite rebuilds it from the timeline")
             project_file.unlink()
         cl = client(base, project_file)
-        r = filmcraft.finish(cl, fc, read_json(edit_p), xml, srt, p.path("work", cut) / "filmcraft_batch.jsonl", base=p.media_base,
+        from . import color
+        edit = read_json(edit_p)
+        r = filmcraft.finish(cl, fc, edit, xml, srt, p.path("work", cut) / "filmcraft_batch.jsonl", base=p.media_base,
                              backup=(p.path("work", cut) / "backup_before_build.fcproj") if bridge is not None else None,
-                             music_analysis=music_analysis, retime_cues=p["retime"].get("cues"), execute=not a.dry_run)
+                             music_analysis=music_analysis, retime_cues=p["retime"].get("cues"), execute=not a.dry_run,
+                             color_plan=color.for_cut(p, cut, edit, log=out.info))
         r["mode"] = "dry-run" if a.dry_run else ("bridge" if bridge is not None else "headless")
         r["media"] = _timeline_media(p, cut)
         if r["media"] == "proxies":

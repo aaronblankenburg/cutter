@@ -32,6 +32,7 @@ DEFAULTS = {
     "project_license": "",
     "paths": {
         "clips": "analysis/clips.json",
+        "color": "analysis/color.json",
         "transcripts": "analysis/transcripts",
         "image_analysis": "analysis/image",
         "proxies": "analysis/proxies",
@@ -96,6 +97,9 @@ DEFAULTS = {
         "person": "",           # an app that embeds the review frontend: the fixed reviewer name
         "submit": True,         # false: no "Send feedback" box
         "embedded": False,      # true: inside another app's page (no brand, full width, same-origin frames)
+    },
+    "color": {
+        "auto": True,           # a colour correction per shot (exposure, white balance, haze); see color.py
     },
     "standins": {
         "sidecars": "",         # folder with the sidecars of the stand-in files in [media] (see standin.py)

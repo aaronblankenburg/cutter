@@ -32,17 +32,21 @@ import math
 import os
 import pathlib
 
-from .util import read_json, write_json
+from .util import log as progress, read_json, write_json
 
 VERSION = 1
 PARAMS = ("exposure", "temperature", "tint", "blacks")
 K_TEMP, K_TINT, K_BLACKS = 0.0034, 0.0015, 0.0014
-LIMITS = {"exposure": (-0.7, 1.0), "temperature": (-25.0, 35.0), "tint": (-20.0, 20.0), "blacks": (-30.0, 0.0)}
-SMALL = {"exposure": 0.1, "temperature": 4.0, "tint": 4.0, "blacks": 4.0}
-MID_LOW, MID_HIGH, MID_TARGET_LOW, MID_TARGET_HIGH = 0.30, 0.62, 0.38, 0.55
-NEUTRAL_MIN = 0.05            # share of near-neutral pixels needed to judge the white balance
-STRENGTH = 0.7                # share of a colour cast that is removed
-HAZE = 0.10                   # p02 above this: flat picture
+# Tuned on real footage (desert, roads, camp fire, dusk): leave mood alone, correct what is clearly off.
+LIMITS = {"exposure": (-0.7, 0.6), "temperature": (-20.0, 25.0), "tint": (-12.0, 12.0), "blacks": (-20.0, 0.0)}
+SMALL = {"exposure": 0.15, "temperature": 8.0, "tint": 6.0, "blacks": 6.0}
+MID_LOW, MID_HIGH, MID_TARGET_LOW, MID_TARGET_HIGH = 0.25, 0.62, 0.36, 0.55
+NIGHT = 0.08                  # p50 below this: night (camp fire, stars); darkness is the picture, not brightened
+BRIGHT_PARTS = 0.8            # p98 above this: the picture has bright parts (sky, lamp, fire); it is not brightened
+LOW_LIGHT = 0.25              # p50 below this: dusk, night, fire light – the colour of the light is the mood
+NEUTRAL_MIN = 0.15            # share of near-neutral pixels needed to judge the white balance
+STRENGTH = 0.5                # share of a colour cast that is removed
+HAZE = 0.12                   # p02 above this: flat picture
 FRAME_W = 160
 
 
@@ -54,7 +58,7 @@ def frame_stats(rgb):
     y = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
     p02, p50, p98 = (float(v) for v in np.percentile(y, (2, 50, 98)))
     chroma = rgb.max(axis=-1) - rgb.min(axis=-1)
-    mask = (chroma < 0.06 + 0.12 * y) & (y > 0.15) & (y < 0.92)
+    mask = (chroma < 0.05 + 0.3 * y) & (y > 0.15) & (y < 0.92)       # neutral, also under a cast of ±15 %
     share = float(mask.mean())
     if share > 0:
         r, g, b = (float(v) for v in rgb[mask].mean(axis=0))
@@ -90,7 +94,7 @@ def measure_clip(path, duration=None, step=1.0):
         cap.release()
 
 
-def measure(p, clip_ids=None, clips=None, log=print):
+def measure(p, clip_ids=None, clips=None, log=progress):
     """Measure the clips that are missing or changed in analysis/color.json (all clips, or `clip_ids`).
     Returns the stored data."""
     target = p.path("color")
@@ -98,7 +102,7 @@ def measure(p, clip_ids=None, clips=None, log=print):
     if data.get("version") != VERSION:
         data = {"version": VERSION, "clips": {}}
     if clips is None:
-        clips = {c["id"]: c for c in read_json(p.path("clips"))["clips"]}
+        clips = load_clips(p)
     todo = []
     for cid in (clip_ids if clip_ids is not None else clips):
         c = clips.get(cid)
@@ -120,6 +124,12 @@ def measure(p, clip_ids=None, clips=None, log=print):
         target.parent.mkdir(parents=True, exist_ok=True)
         write_json(target, data)
     return data
+
+
+def load_clips(p):
+    """clips.json with the paths resolved against [media]: {id: clip}."""
+    from .timeline import resolve_clips
+    return resolve_clips({c["id"]: c for c in read_json(p.path("clips"))}, p.media_roots())
 
 
 # ---------------------------------------------------------------- the suggestion
@@ -153,18 +163,16 @@ def suggest(frames, t_in=None, t_out=None):
 
     # exposure: towards a normal middle, never clipping the highlights
     e = 0.0
-    if p50 < MID_LOW and p50 > 0.01:
+    if NIGHT < p50 < MID_LOW and p98 < BRIGHT_PARTS:
         e = 2.2 * math.log2(MID_TARGET_LOW / p50)
-        if p98 < 0.97:
-            e = min(e, 2.2 * math.log2(0.97 / max(p98, 0.01)))
-        e = max(e, 0.0)
+        e = max(0.0, min(e, 2.2 * math.log2(0.95 / max(p98, 0.01))))
     elif p50 > MID_HIGH:
         e = 2.2 * math.log2(MID_TARGET_HIGH / p50)
     out["exposure"] = e
 
     # white balance from the near-neutral pixels
     weight = sum(f[7] for f in rows)
-    if weight / len(rows) >= NEUTRAL_MIN:
+    if weight / len(rows) >= NEUTRAL_MIN and p50 >= LOW_LIGHT:
         r = sum(f[4] * f[7] for f in rows) / weight
         g = sum(f[5] * f[7] for f in rows) / weight
         b = sum(f[6] * f[7] for f in rows) / weight
@@ -235,7 +243,7 @@ def plan(edit, clips, data, enabled=True, review=None):
     groups = {}
     for sec, s in shots:
         c = clips.get(s.get("clip"))
-        if c and base.get(s["nr"]):
+        if c and (measured.get(s.get("clip")) or {}).get("frames"):
             groups.setdefault((sec, camera_key(c)), []).append(s["nr"])
     smooth = {nr: dict(v) for nr, v in base.items()}
     for nrs in groups.values():
@@ -259,10 +267,12 @@ def plan(edit, clips, data, enabled=True, review=None):
     return {"on": bool(film_on), "shots": out}
 
 
-def for_cut(p, cut, edit, clips=None, review_entries=None, log=print):
+def for_cut(p, cut, edit, clips=None, review_entries=None, log=progress):
     """The plan of a cut: measures what is missing, reads [color] and the review's choices."""
+    from .legacy import edit_from_legacy
+    edit = edit_from_legacy(edit)[0]
     if clips is None:
-        clips = {c["id"]: c for c in read_json(p.path("clips"))["clips"]}
+        clips = load_clips(p)
     used = {s.get("clip") for sec in edit.get("sections", []) for s in sec.get("shots", [])}
     used |= {c.get("clip") for sec in edit.get("sections", []) for s in sec.get("shots", []) for c in s.get("cutaways") or []}
     data = measure(p, [c for c in used if c in clips], clips, log=log)

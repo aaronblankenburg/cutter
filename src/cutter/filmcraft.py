@@ -418,8 +418,9 @@ def music_keyframes(a, b, lufs, dialogue, low, mu, fade=None, dip=None):
 
 
 def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music_analysis=None, retime_cues=None,
-           execute=True):
-    """Bring a version in and finish it. Returns log lines and counts."""
+           execute=True, color_plan=None):
+    """Bring a version in and finish it. Returns log lines and counts.
+    color_plan: color.plan() of the cut; its values go into a Color Grading effect per shot and cutaway."""
     edit = edit_from_legacy(edit)[0]
     log = []
     shots = {s["nr"]: s for sec in edit["sections"] for s in sec["shots"]}
@@ -684,10 +685,33 @@ def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music
             tok = c["name"].split()[0] if c["name"].split() else ""
             if tok.endswith("e") and tok[:-1].isdigit():
                 v4.setdefault(int(tok[:-1]), []).append(c)
+    added = {}                                  # effects the batch adds per clip: the next one's index
+
+    def next_index(c):
+        i = len(c["effects"]) + added.get(c["clip"], 0)
+        added[c["clip"]] = added.get(c["clip"], 0) + 1
+        return i
+
+    # colour: the suggestion (or the edit list's own values) as a Color Grading effect
+    n_color = 0
+    for nr, cp in sorted(((color_plan or {}).get("shots") or {}).items()):
+        items = ([(v1[nr], cp.get("values") or {})] if nr in v1 else []) \
+            + list(zip(v4.get(nr, []), cp.get("cutaways") or []))
+        for c, values in items:
+            if not values:
+                continue
+            idx = next_index(c)
+            add("effects.apply", {"clips": [c["clip"]], "effect": "lumetri"})
+            for k, v in values.items():
+                add("effects.setParam", {"clip": c["clip"], "effect": idx, "param": k, "value": v})
+            n_color += 1
+    if color_plan is not None:
+        log.append(f"Colour: {n_color} clips corrected" + ("" if color_plan.get("on") else " (switched off)"))
+
     n_stab = 0
     for nr in sorted(nr for nr, s in shots.items() if s.get("stabilize")):
         for c in ([v1[nr]] if nr in v1 else []) + v4.get(nr, []):
-            idx = len(c["effects"])
+            idx = next_index(c)
             add("effects.apply", {"clips": [c["clip"]], "effect": "warp_stabilizer"})
             add("effects.setParam", {"clip": c["clip"], "effect": idx, "param": "max_scale", "value": fc["stabilize"]["max_scale"]})
             n_stab += 1
@@ -709,7 +733,7 @@ def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music
     batch_path = pathlib.Path(batch_path)
     batch_path.parent.mkdir(parents=True, exist_ok=True)
     batch_path.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in batch) + "\n", encoding="utf-8")
-    result = {"batch": str(batch_path), "commands": len(batch), "dialogue": n_dialogue, "stabilised": n_stab,
+    result = {"batch": str(batch_path), "commands": len(batch), "dialogue": n_dialogue, "stabilised": n_stab, "colour": n_color,
               "sequence": new_seq, "duration": round(total, 3)}
     if execute:
         out, err, code = client.run(batch_path, keep_going=True)
