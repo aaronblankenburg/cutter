@@ -170,7 +170,40 @@ select, input[type="text"], textarea {
 .quick button[data-group="good"] { --gruppe: #4cc38a; }
 .quick button[data-group="question"] { --gruppe: #f5b942; }
 .quick .key { color: var(--muted); font-size: 12px; margin-left: 4px; }
-.note-form { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; margin-top: 8px; }
+.note-form { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 6px; margin-top: 8px; }
+.whole-choice { display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 14px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.whole-choice input { margin: 0; }
+.entry-form.whole .whole-choice { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.entry-form.whole .quick button[data-action="cut_earlier"], .entry-form.whole .quick button[data-action="cut_later"] { opacity: .4; }
+.entry.general { border-left-style: double; border-left-width: 6px; }
+
+/* alternatives: where the agent weighed other clips or ranges */
+.alts { background: var(--panel); border: 1px solid rgba(45, 212, 191, .45); border-left: 4px solid #2dd4bf;
+  border-radius: var(--radius); padding: 10px 12px; overflow: auto; flex: 0 0 auto; max-height: 62%; }
+.alts-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.alts-title { font-weight: 700; color: #2dd4bf; }
+.alts-where { color: var(--muted); font-size: 13px; }
+.alts p { margin: 6px 0 0; font-size: 14px; }
+.alts-current { color: var(--muted); }
+.alts-options { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.alt-option { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 4px 10px; align-items: start;
+  padding: 6px; border-radius: 8px; background: var(--panel2); }
+.alt-option.chosen { box-shadow: inset 0 0 0 2px #2dd4bf; }
+.alt-option video, .alt-missing { width: 148px; aspect-ratio: 16 / 9; background: #000; border-radius: 6px; grid-row: span 2; }
+.alt-missing { display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.alt-text { font-size: 13px; overflow-wrap: anywhere; }
+.alt-text b { display: block; font-variant-numeric: tabular-nums; }
+.alt-text span { color: #c9d0d9; }
+.alt-option button { justify-self: start; min-height: 32px; padding: 3px 10px; font-size: 13px; }
+.alt-keep { margin-top: 8px; min-height: 32px; padding: 3px 10px; font-size: 13px; }
+.entry .alt-info { display: block; color: #2dd4bf; font-size: 13px; margin-top: 2px; }
+.tl-text .tl-alt { color: #2dd4bf; display: block; margin-top: 2px; }
+
+/* embedded in another app's page (app.embedded): no brand, the frame's full width */
+body.embedded .brand { display: none; }
+body.embedded .top { justify-content: flex-end; }
+body.embedded .layout { max-width: none; }
 .reactions { display: flex; gap: 6px; }
 .reactions button { font-size: 20px; padding: 2px 10px; }
 #note { min-width: 0; font-size: 16px; }
@@ -340,6 +373,9 @@ select, input[type="text"], textarea {
   .speed button { min-width: 40px; padding: 7px 4px; font-size: 14px; }
   .note-form { grid-template-columns: minmax(0, 1fr) auto; }
   .reactions { grid-column: 1 / -1; }
+  .whole-choice { grid-column: 1 / -1; justify-self: start; min-height: 36px; }
+  .alt-option { grid-template-columns: minmax(0, 1fr); }
+  .alt-option video, .alt-missing { width: 100%; grid-row: auto; }
   #tl-canvas { height: 84px; }
   .quick { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .quick button { padding: 7px 6px; font-size: 14px; }

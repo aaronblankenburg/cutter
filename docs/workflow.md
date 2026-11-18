@@ -145,8 +145,18 @@ plain HTTP: share it only in networks you trust. For reviewers elsewhere, deploy
 ([deploy.md](deploy.md)).
 
 Reviewers comment on a moment or a range, pick a quick action (shorter, remove, other shot, music softer …) or react
-with an emoji. The agent's notes from `decisions.json` appear in violet at their places; its replies appear under
-each comment. When a new cut is published, the app opens it automatically.
+with an emoji; **Whole film** next to the note field makes a general comment without a moment. The agent's notes
+from `decisions.json` appear in violet at their places; its replies appear under each comment. When a new cut is
+published, the app opens it automatically.
+
+**Alternatives:** where the agent weighed other clips or ranges (`cuts/<cut>/alternatives.json`), a teal line marks
+the shot on the timeline and a box next to the cut plays a short preview of every option. **Take this** or
+**Keep as is** becomes a comment that names the option, so the next cut applies it exactly – useful when the footage
+is long forgotten and nobody wants to watch it all again.
+
+**Embedding:** another web app (for example Cutlery) can serve the frontend (`src/cutter/review_app/static/`) in a
+frame with this API behind its own login; see the module docstring of `review_app/server.py` and
+[formats.md](formats.md#timelinejson-review-app) for the keys of `project.json` it may set.
 
 **Sending the feedback off:** when a reviewer is through, the button **Send feedback to <agent>** above the
 comments tells the agent that a round is complete. `cutter feedback wait` blocks until that happens, takes the

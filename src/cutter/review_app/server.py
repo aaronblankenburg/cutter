@@ -16,6 +16,15 @@ Behind nginx: the service listens on 127.0.0.1 only; the client IP comes from X-
 Project title, reviewers (names and colours), the agent's name and the UI language are read from
 <data>/project.json if present: {"title": "My film", "people": [{"name": "Alice", "color": "#38bdf8"}],
 "agent": "Claude", "ui_language": "en"}.
+An app that embeds the frontend (in an iframe of the same origin, usually serving static/ itself with this API
+behind its own login) may add to project.json: "person": "Alice" (the fixed reviewer name, never asked for),
+"submit": false (no "Send feedback" box), "embedded": true (no brand or title in the header, the layout fills the
+frame; this server then allows frames of the same origin). The frontend opens the cut of a "cut" query parameter of
+its page URL (index.html?cut=cut2) when that cut exists. With "embedded" it posts {source: "cutter-review", cut,
+open, entries} to its parent window (same origin) whenever the selected cut or its entries change.
+Entries about the whole film have no moment ("t": null). "alternative": "<place id>/<option>" or "<place id>/keep"
+records a choice among the alternatives of the cut (timeline.json "alternatives"); one per reviewer and place:
+choosing again changes the earlier entry.
 Data written by the earlier German version (data/fassungen/, table "eintraege", German timeline.json keys) is read
 transparently; an old database is migrated once at start-up after a backup copy is made next to it.
 """
@@ -54,6 +63,7 @@ EDIT_ACTIONS = {"cut_earlier", "cut_later"}
 
 CUT_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 FILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,80}$")
+ALTERNATIVE_RE = re.compile(r"^([A-Za-z0-9_-]{1,40})/(keep|[1-9])$")    # "<place id>/<option number>" or "<place id>/keep"
 TYPES = {
     ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
     ".svg": "image/svg+xml", ".json": "application/json; charset=utf-8", ".mp4": "video/mp4",
@@ -69,7 +79,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cut TEXT NOT NULL,
-    t REAL NOT NULL,
+    t REAL,
     t_to REAL,
     nr INTEGER,
     nr_to INTEGER,
@@ -86,7 +96,8 @@ CREATE TABLE IF NOT EXISTS entries (
     status TEXT NOT NULL DEFAULT 'open',
     reply TEXT,
     created TEXT NOT NULL,
-    changed TEXT
+    changed TEXT,
+    alternative TEXT
 );
 CREATE INDEX IF NOT EXISTS entries_cut ON entries (cut, t);
 CREATE TABLE IF NOT EXISTS requests (
@@ -160,6 +171,26 @@ def migrate_legacy_db(db, path):
         db.execute("ALTER TABLE eintraege RENAME TO eintraege_legacy")
     sys.stderr.write(f"Migrated {len(rows)} comments from the earlier version (backup: {backup})\n")
     return len(rows)
+
+
+def migrate_general_entries(db):
+    """Databases before 0.5.0 have "t REAL NOT NULL"; general comments (about the whole film) have no moment."""
+    cols = {r[1]: r for r in db.execute("PRAGMA table_info(entries)")}
+    if "alternative" not in cols:                     # 0.5.0: the choice among a place's alternatives
+        db.execute("ALTER TABLE entries ADD COLUMN alternative TEXT")
+        cols = {r[1]: r for r in db.execute("PRAGMA table_info(entries)")}
+    if not cols["t"][3]:
+        return False
+    sql = db.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries'").fetchone()[0]
+    with db:
+        db.execute("ALTER TABLE entries RENAME TO entries_before_050")
+        db.execute(sql.replace("t REAL NOT NULL", "t REAL", 1))
+        names = ", ".join(cols)
+        db.execute(f"INSERT INTO entries ({names}) SELECT {names} FROM entries_before_050")
+        db.execute("DROP TABLE entries_before_050")
+        db.execute("DROP INDEX IF EXISTS entries_cut")
+        db.execute("CREATE INDEX entries_cut ON entries (cut, t)")
+    return True
 
 
 def now():
@@ -323,6 +354,7 @@ class Timeline:
         self.edit_points = self.d.get("edit_points", [])
         self.edit_t = [c["t"] for c in self.edit_points]
         self.duration = float(self.d.get("duration") or (self.shots[-1]["end"] if self.shots else 0))
+        self.alternatives = {a["id"]: a for a in self.d.get("alternatives") or [] if isinstance(a, dict) and a.get("id")}
 
     def shot(self, t):
         if not self.shots:
@@ -340,8 +372,13 @@ class Timeline:
         return {"t": c["t"], "before": c.get("before"), "after": c.get("after"), "kind": c.get("kind", "shot")}
 
     def enrich(self, e, edit_hint=None):
-        """Add nr, clip, source time, section, music and, if needed, the edit point from the timeline."""
+        """Add nr, clip, source time, section, music and, if needed, the edit point from the timeline.
+        A general entry (t None, about the whole film) gets none of them."""
         t = e["t"]
+        if t is None:
+            e.update(t_to=None, nr=None, nr_to=None, clip=None, source_t=None, cutaway=None, section=None, music=None,
+                     edit_point=None)
+            return e
         s = self.shot(t) or {}
         e["nr"], e["clip"], e["section"] = s.get("nr"), s.get("clip"), s.get("section")
         e["source_t"] = round(s["source_in"] + (t - s["start"]), 2) if s.get("source_in") is not None else None
@@ -382,6 +419,13 @@ class AppConfig:
                           for p in (d.get("people") or []) if isinstance(p, dict) and p.get("name")]
                 self.data = {"title": str(d.get("title") or "")[:120], "people": people[:20],
                              "agent": str(d.get("agent") or "Claude")[:40], "ui_language": str(d.get("ui_language") or "")[:8]}
+                # set by an app that embeds the frontend (see the module docstring)
+                if isinstance(d.get("person"), str) and d["person"].strip():
+                    self.data["person"] = " ".join(d["person"].split())[:40]
+                if d.get("submit") is False:
+                    self.data["submit"] = False
+                if d.get("embedded") is True:
+                    self.data["embedded"] = True
                 self.state = state
             return self.data
 
@@ -439,6 +483,7 @@ class Store:
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.executescript(SCHEMA)
         migrate_legacy_db(self.db, path)
+        migrate_general_entries(self.db)
         self.db.row_factory = sqlite3.Row
         self.start, self.counter = secrets.token_hex(3), 0
 
@@ -459,7 +504,7 @@ class Store:
             sql += " AND status = ?"
             arg.append(status)
         with self.lock:
-            rows = self.db.execute(sql + " ORDER BY t, id", arg).fetchall()
+            rows = self.db.execute(sql + " ORDER BY t IS NOT NULL, t, id", arg).fetchall()   # general ones first
         return [self.as_dict(r) for r in rows]
 
     def one(self, eid):
@@ -470,7 +515,7 @@ class Store:
     def _values(self, e):
         return {k: (json.dumps(e[k], ensure_ascii=False) if k in JSON_FIELDS and e.get(k) is not None else e.get(k))
                 for k in ("cut", "t", "t_to", "nr", "nr_to", "clip", "source_t", "cutaway", "section",
-                          "music", "edit_point", "action", "reaction", "text", "person")}
+                          "music", "edit_point", "action", "reaction", "text", "person", "alternative")}
 
     def new(self, e):
         w = self._values(e)
@@ -522,6 +567,13 @@ class Store:
                 self.db.execute("INSERT INTO requests (cut, person, created) VALUES (?, ?, ?)", (cut, person, now()))
         return self.request(cut), not r
 
+    def own_choice(self, cut, person, place):
+        """The id of the person's entry that chose among the alternatives of this place, or None."""
+        with self.lock:
+            r = self.db.execute("SELECT id FROM entries WHERE cut = ? AND lower(person) = lower(?) AND alternative LIKE ? "
+                                "ORDER BY id DESC LIMIT 1", (cut, person, place + "/%")).fetchone()
+        return r[0] if r else None
+
     def count(self, cut):
         with self.lock:
             rows = self.db.execute("SELECT status, COUNT(*) FROM entries WHERE cut = ? GROUP BY status", (cut,)).fetchall()
@@ -543,7 +595,7 @@ def export_data(cut, tl, entries):
         people[e["person"]] = people.get(e["person"], 0) + 1
     counts = {s: sum(1 for e in entries if e["status"] == s) for s in STATUSES}
     fields = ("id", "t", "t_to", "nr", "nr_to", "clip", "source_t", "cutaway", "section", "music", "edit_point",
-              "action", "action_text", "text", "reaction", "person", "status", "reply", "created", "changed")
+              "action", "action_text", "text", "reaction", "alternative", "person", "status", "reply", "created", "changed")
     return {"format": 2, "cut": cut, "title": tl.d.get("title"), "duration": tl.duration,
             "source": tl.d.get("source"), "exported": now(),
             "people": [{"name": n, "entries": k} for n, k in sorted(people.items())],
@@ -559,7 +611,13 @@ def export_markdown(d, tl):
              + ", ".join(f"{p['name']} {p['entries']}" for p in d["people"]), ""]
     shots = {s["nr"]: s for s in tl.shots}
     section = nr = None
-    for e in d["entries"]:
+    general = [e for e in d["entries"] if e.get("t") is None]
+    if general:
+        lines += ["", "## Whole film", ""]
+    for e in general + [e for e in d["entries"] if e.get("t") is not None]:
+        if e.get("t") is None:
+            lines.append(entry_line(e, ""))
+            continue
         if e["section"] != section:
             section, nr = e["section"], None
             lines += ["", f"## {section or 'no section'}", ""]
@@ -569,23 +627,31 @@ def export_markdown(d, tl):
             src = f" · {s.get('clip')} {time_text(s.get('source_in'))}–{time_text(s.get('source_out'))}" if s.get("source_in") is not None else ""
             lines += [f"### Shot {nr} · {time_text(s.get('start'))}–{time_text(s.get('end'))}{src}",
                       f"_{s.get('note', '')}_" if s.get("note") else "", ""]
-        mark = "x" if e["status"] == "done" else ("~" if e["status"] == "rejected" else " ")
-        what = " ".join(x for x in (f"**{e['action_text']}**" if e.get("action_text") else "", e.get("reaction") or "") if x)
-        rng = f"–{time_text(e['t_to'])}" + (f" (to shot {e['nr_to']})" if e.get("nr_to") else "") if e.get("t_to") else ""
-        extra = []
-        if e.get("edit_point"):
-            c = e["edit_point"]
-            extra.append(f"edit {time_text(c['t'])} ({c['before']}|{c['after']}{', ' + c['kind'] if c.get('kind') != 'shot' else ''})")
-        if e.get("cutaway"):
-            extra.append(f"in cutaway {e['cutaway']['clip']} @ {time_text(e['cutaway']['source_t'])}")
-        if e.get("music") and e.get("action") in ("music_softer", "music_louder"):
-            extra.append(f"music {e['music']['cue']} @ {time_text(e['music']['t_track'])}")
-        content = " ".join(x for x in (what, f"“{e['text']}”" if e.get("text") else "") if x)
-        lines.append(f"- [{mark}] {time_text(e['t'])}{rng} · {e['person']}: {content}"
-                     + (f" ({'; '.join(extra)})" if extra else "") + f" · #{e['id']}")
-        if e["status"] != "open" or e.get("reply"):
-            lines.append(f"  - {e['status']}" + (f": {e['reply']}" if e.get("reply") else ""))
+        lines.append(entry_line(e, time_text(e["t"])))
     return "\n".join(lines).replace("\n\n\n", "\n\n") + "\n"
+
+
+def entry_line(e, when):
+    """One entry of the Markdown export (with its status and reply on a second line); when: its time, or "" (general)."""
+    mark = "x" if e["status"] == "done" else ("~" if e["status"] == "rejected" else " ")
+    what = " ".join(x for x in (f"**{e['action_text']}**" if e.get("action_text") else "", e.get("reaction") or "") if x)
+    rng = f"–{time_text(e['t_to'])}" + (f" (to shot {e['nr_to']})" if e.get("nr_to") else "") if e.get("t_to") else ""
+    extra = []
+    if e.get("edit_point"):
+        c = e["edit_point"]
+        extra.append(f"edit {time_text(c['t'])} ({c['before']}|{c['after']}{', ' + c['kind'] if c.get('kind') != 'shot' else ''})")
+    if e.get("cutaway"):
+        extra.append(f"in cutaway {e['cutaway']['clip']} @ {time_text(e['cutaway']['source_t'])}")
+    if e.get("alternative"):
+        extra.append(f"alternative {e['alternative']}")
+    if e.get("music") and e.get("action") in ("music_softer", "music_louder"):
+        extra.append(f"music {e['music']['cue']} @ {time_text(e['music']['t_track'])}")
+    content = " ".join(x for x in (what, f"“{e['text']}”" if e.get("text") else "") if x)
+    line = f"- [{mark}] {when + rng + ' · ' if when else ''}{e['person']}: {content}" + \
+        (f" ({'; '.join(extra)})" if extra else "") + f" · #{e['id']}"
+    if e["status"] != "open" or e.get("reply"):
+        line += "\n" + f"  - {e['status']}" + (f": {e['reply']}" if e.get("reply") else "")
+    return line
 
 
 # ---------------------------------------------------------------- HTTP
@@ -624,9 +690,14 @@ class Handler(BaseHTTPRequestHandler):
         self._started = True
         super().send_response(code, message)
 
+    def embedded(self):
+        """project.json "embedded": true allows frames of the same origin (an app that embeds the frontend)."""
+        cfg = getattr(self.server, "app_config", None)
+        return bool(cfg and cfg.get().get("embedded"))
+
     def end_headers(self):
         for k, v in (("X-Content-Type-Options", "nosniff"), ("Referrer-Policy", "same-origin"),
-                     ("X-Frame-Options", "DENY"), ("X-Robots-Tag", "noindex, nofollow")):
+                     ("X-Frame-Options", "SAMEORIGIN" if self.embedded() else "DENY"), ("X-Robots-Tag", "noindex, nofollow")):
             self.send_header(k, v)
         if getattr(self, "_cookie", None):
             secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
@@ -711,7 +782,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Last-Modified", modified)
         self.send_header("Cache-Control", "no-cache")
         if csp:
-            self.send_header("Content-Security-Policy", CSP)
+            self.send_header("Content-Security-Policy",
+                             CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") if self.embedded() else CSP)
         self.end_headers()
         if self.command == "HEAD" or length == 0:
             return
@@ -832,6 +904,17 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(400, "Give an action, a reaction or a text")
 
     @staticmethod
+    def alternative(value, tl):
+        """Check "<place>/<n>" or "<place>/keep" against the alternatives of the cut; None or "" clears it."""
+        if value in (None, ""):
+            return None
+        m = ALTERNATIVE_RE.match(value) if isinstance(value, str) else None
+        place = tl.alternatives.get(m.group(1)) if m else None
+        if not place or (m.group(2) != "keep" and int(m.group(2)) > len(place.get("options") or [])):
+            raise ApiError(400, 'alternative: "<place id>/<option number>" or "<place id>/keep" of this cut expected')
+        return value
+
+    @staticmethod
     def person(value):
         if not isinstance(value, str) or not value.strip() or len(value.strip()) > 40:
             raise ApiError(400, "Name missing (at most 40 characters)")
@@ -871,11 +954,15 @@ class Handler(BaseHTTPRequestHandler):
                 tl = self.cut(d.get("cut"))
                 e = {"cut": d["cut"], "person": self.person(d.get("person")), "action": None, "reaction": None, "text": ""}
                 self.content(d, e)
-                e["t"] = self.number(d.get("t"), "t", tl)
+                e["alternative"] = self.alternative(d.get("alternative"), tl)
+                e["t"] = self.number(d.get("t"), "t", tl, empty=True)          # None: a general entry (whole film)
                 e["t_to"] = self.number(d.get("t_to"), "t_to", tl, empty=True)
-                if e["t_to"] is not None and e["t_to"] <= e["t"]:
+                if e["t_to"] is not None and (e["t"] is None or e["t_to"] <= e["t"]):
                     e["t_to"] = None
                 tl.enrich(e, d.get("edit_t"))
+                mine = e["alternative"] and store.own_choice(e["cut"], e["person"], e["alternative"].split("/")[0])
+                if mine:                                   # choosing again changes the earlier choice
+                    return self.send_json({"rev": store.rev(), "entry": store.change(mine, e)})
                 return self.send_json({"rev": store.rev(), "entry": store.new(e)}, 201)
 
             hit = re.fullmatch(r"/api/entries/(\d+)", path)
@@ -893,11 +980,13 @@ class Handler(BaseHTTPRequestHandler):
                 tl = self.cut(old["cut"])
                 e = dict(old)
                 self.content(d, e)
+                if "alternative" in d:
+                    e["alternative"] = self.alternative(d["alternative"], tl)
                 if "t" in d:
-                    e["t"] = self.number(d["t"], "t", tl)
+                    e["t"] = self.number(d["t"], "t", tl, empty=True)
                 if "t_to" in d:
                     e["t_to"] = self.number(d["t_to"], "t_to", tl, empty=True)
-                if e.get("t_to") is not None and e["t_to"] <= e["t"]:
+                if e.get("t_to") is not None and (e["t"] is None or e["t_to"] <= e["t"]):
                     e["t_to"] = None
                 edit_old = (old.get("edit_point") or {}).get("t")
                 tl.enrich(e, d.get("edit_t", edit_old if "t" not in d else None))

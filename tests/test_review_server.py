@@ -42,6 +42,12 @@ class ReviewServer(unittest.TestCase):
         d = cls.tmp.__enter__()
         cls.data = d / "data"
         make_cut(cls.data)
+        alt = make_cut(cls.data, "cut2")
+        tl = json.loads((alt / "timeline.json").read_text())
+        tl["alternatives"] = [{"id": "a4", "nr": 4, "t": 10.0, "t_to": 18.0, "reason": "two takes of the view",
+                               "options": [{"clip": "C002", "in": 1.0, "out": 9.0, "why": "steadier",
+                                            "file": "alt-a4-1.mp4", "poster": "alt-a4-1.jpg"}]}]
+        (alt / "timeline.json").write_text(json.dumps(tl), encoding="utf-8")
         cls.password, cls.htpasswd = make_htpasswd(d, "tester")
         cls.port = free_port()
         cls.proc = start(cls.data, cls.htpasswd, cls.port)
@@ -142,6 +148,81 @@ class ReviewServer(unittest.TestCase):
         d = json.loads(body)
         self.assertTrue(d["unchanged"])
         self.assertEqual(d["request"]["id"], first["id"], "the request is reported even when no comment changed")
+
+
+    def test_general_comment_has_no_moment_and_comes_first(self):
+        r, body = self.req("POST", "/api/entries", {"cut": "cut2", "t": 3.0, "text": "here", "person": "Reviewer G"})
+        self.assertEqual(r.status, 201, body)
+        r, body = self.req("POST", "/api/entries", {"cut": "cut2", "t": None, "t_to": 5.0, "text": "Much too long overall",
+                                                     "person": "Reviewer G"})
+        self.assertEqual(r.status, 201, body)
+        e = json.loads(body)["entry"]
+        self.assertEqual((e["t"], e["t_to"], e["nr"], e["clip"]), (None, None, None, None))
+        r, body = self.req("GET", "/api/entries?cut=cut2")
+        self.assertIsNone(json.loads(body)["entries"][0]["t"], "general entries come first")
+        r, body = self.req("PATCH", f"/api/entries/{e['id']}", {"t": 11.0, "person": "Reviewer G"})
+        self.assertEqual(json.loads(body)["entry"]["nr"], 4, "a general entry can be given a moment")
+        r, body = self.req("PATCH", f"/api/entries/{e['id']}", {"t": None, "person": "Reviewer G"})
+        self.assertIsNone(json.loads(body)["entry"]["nr"])
+        r, body = self.req("GET", "/api/export?cut=cut2&format=md")
+        md = body.decode()
+        self.assertIn("## Whole film", md)
+        self.assertLess(md.index("Much too long overall"), md.index("here"))
+
+    def test_choosing_an_alternative_once_per_place(self):
+        base = {"cut": "cut2", "t": 10.0, "t_to": 18.0, "person": "Reviewer H"}
+        r, body = self.req("POST", "/api/entries", dict(base, alternative="a4/2", text="x"))
+        self.assertEqual(r.status, 400, "there is only one option")
+        r, body = self.req("POST", "/api/entries", dict(base, alternative="zz/1", text="x"))
+        self.assertEqual(r.status, 400, "unknown place")
+        r, body = self.req("POST", "/api/entries", dict(base, alternative="a4/1", action="other_shot", text="Take C002"))
+        self.assertEqual(r.status, 201, body)
+        first = json.loads(body)["entry"]
+        self.assertEqual(first["alternative"], "a4/1")
+        r, body = self.req("POST", "/api/entries", dict(base, alternative="a4/keep", text="Keep it"))
+        self.assertEqual(r.status, 200, "choosing again changes the earlier choice")
+        e = json.loads(body)["entry"]
+        self.assertEqual((e["id"], e["alternative"], e["text"], e["action"]), (first["id"], "a4/keep", "Keep it", None), "the new choice replaces the old one")
+        r, body = self.req("POST", "/api/entries", dict(base, person="Reviewer I", alternative="a4/1", text="C002"))
+        self.assertEqual(r.status, 201, "another reviewer chooses on their own")
+        r, body = self.req("GET", "/api/export?cut=cut2")
+        self.assertIn("a4/keep", [x["alternative"] for x in json.loads(body)["entries"]])
+        r, body = self.req("GET", "/api/export?cut=cut2&format=md")
+        self.assertIn("alternative a4/keep", body.decode())
+
+    def test_app_config_for_an_embedding_app(self):
+        project = self.data / "project.json"
+        project.write_text(json.dumps({"title": "Demo", "person": "  Host   User ", "submit": False, "embedded": True}),
+                           encoding="utf-8")
+        try:
+            r, body = self.req("GET", "/api/cuts")
+            app = json.loads(body)["app"]
+            self.assertEqual((app["person"], app["submit"], app["embedded"]), ("Host User", False, True))
+            r, _ = self.req("GET", "/")
+            self.assertEqual(r.getheader("X-Frame-Options"), "SAMEORIGIN", "embedded: frames of the same origin")
+            self.assertIn("frame-ancestors 'self'", r.getheader("Content-Security-Policy"))
+        finally:
+            project.unlink()
+        r, body = self.req("GET", "/api/cuts")
+        self.assertNotIn("embedded", json.loads(body)["app"])
+
+
+class Migration(unittest.TestCase):
+    def test_older_database_gets_general_entries_and_alternatives(self):
+        import sqlite3
+        sys.path.insert(0, str(SERVER.parent))
+        import server
+        with TempDir() as d:
+            db = sqlite3.connect(d / "feedback.sqlite")
+            old = server.SCHEMA.replace("    t REAL,", "    t REAL NOT NULL,").replace(",\n    alternative TEXT", "")
+            db.executescript(old)
+            db.execute("INSERT INTO entries (cut, t, text, person, created) VALUES ('cut1', 2.5, 'old', 'A', 'now')")
+            db.commit()
+            db.close()
+            store = server.Store(str(d / "feedback.sqlite"))
+            store.new({"cut": "cut1", "t": None, "text": "general", "person": "A", "alternative": None})
+            self.assertEqual([(e["t"], e["text"]) for e in store.list("cut1")], [(None, "general"), (2.5, "old")])
+            store.db.close()
 
 
 class PasswordRequired(unittest.TestCase):

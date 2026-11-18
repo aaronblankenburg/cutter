@@ -32,7 +32,8 @@ REPO = HERE.parents[1]
 SERVER = REPO / "src" / "cutter" / "review_app" / "server.py"
 HOST, PORTS, LOGIN = "127.0.0.1", range(8295, 8300), "tester"
 RUNS = [("test_app.js", "en"), ("test_comments.js", "en"), ("test_new_cut.js", "en"), ("test_decisions.js", "en"),
-        ("test_width.js", "en"), ("test_smoke_de.js", "de"), ("test_width.js", "de")]
+        ("test_alternatives.js", "en"), ("test_width.js", "en"), ("test_smoke_de.js", "de"), ("test_width.js", "de")]
+EMBEDDING_KEYS = ("person", "submit", "embedded")      # set by test_alternatives.js, never left for the next file
 TEST_TIMEOUT = 900
 
 
@@ -77,6 +78,8 @@ class Server:
         project = self.data / "project.json"
         d = json.loads(project.read_text(encoding="utf-8"))
         d["ui_language"] = ui_language
+        for k in EMBEDDING_KEYS:
+            d.pop(k, None)
         project.write_text(json.dumps(d, indent=1), encoding="utf-8")
         order = ([self.port] if self.port else []) + [p for p in PORTS if p != self.port]
         for port in order:
@@ -172,7 +175,7 @@ def main():
         for name, lang in runs:
             port = server.start(lang)
             print(f"\n== {name} ({lang}) on http://{HOST}:{port}/", flush=True)
-            test_env = dict(env, BASE=f"http://{HOST}:{port}/")
+            test_env = dict(env, BASE=f"http://{HOST}:{port}/", DATA=str(fixture / "data"))
             if a.shots:
                 shots = pathlib.Path(a.shots).resolve() / lang
                 shots.mkdir(parents=True, exist_ok=True)

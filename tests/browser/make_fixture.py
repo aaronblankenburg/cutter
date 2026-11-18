@@ -312,6 +312,29 @@ def check_assumptions(tls):
         sys.exit("make_fixture: the timelines no longer fit the tests:\n  " + "\n  ".join(problems))
 
 
+# test_alternatives.js: one place in cut6 (the shot at ALT_AT) with two playable options and one without a clip
+ALT_AT = 250.0
+
+
+def add_alternatives(tl, folder, work):
+    """alternatives.json for cut6, converted and rendered with review_data like cutter review-data does."""
+    clip = work / "C900.mp4"
+    run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size=640x360:rate={FPS}:d=8",
+         "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=48000:d=8", "-c:v", "libx264", "-preset", "superfast",
+         "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", clip])
+    nr = shot_at(tl, ALT_AT)["nr"]
+    spec = {"places": [{"id": "workshop", "nr": nr, "reason": "Three takes of the workshop table were close.",
+                        "options": [{"clip": "C900", "in": 1.0, "out": 4.0, "why": "Steadier picture"},
+                                    {"clip": "C900", "in": 4.0, "out": 7.5, "why": "Closer on the hands"},
+                                    {"clip": "C404", "in": 0.0, "out": 2.0, "why": "Clip that is gone"}]}]}
+    path = work / "alternatives_cut6.json"
+    path.write_text(json.dumps(spec), encoding="utf-8")
+    places = review_data.alternatives(path, tl, {"C900": str(clip)})
+    review_data.alternative_previews(places, folder)
+    tl["alternatives"] = review_data.without_internal(places)
+    tl["source"]["alternatives"] = path.name
+
+
 # ---------------------------------------------------------------- video
 
 def render(name, tl, folder, work):
@@ -378,6 +401,8 @@ def main():
     def one(name):
         folder = data / "cuts" / name
         folder.mkdir(parents=True, exist_ok=True)
+        if name == "cut6":
+            add_alternatives(tls[name], folder, work)
         return render(name, tls[name], folder, work)
     with ThreadPoolExecutor(max_workers=len(CUTS)) as ex:
         durations = dict(zip(CUTS, ex.map(one, CUTS)))

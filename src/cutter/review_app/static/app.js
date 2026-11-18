@@ -1,7 +1,9 @@
 'use strict';
 /* cutter review app – frontend without dependencies. Project title, reviewers, the agent's name and the UI language
    come from data/project.json (via /api/cuts → app); the browser language is the fallback for the language.
-   Older German-keyed timeline.json files are read transparently (normalizeTimeline). */
+   An app that embeds this page may set "person" (fixed reviewer name), "submit": false and "embedded": true there;
+   embedded, the page tells its parent window about the cut and its entries (postMessage, source "cutter-review").
+   ?cut=<id> (or ?f=<id>) opens that cut. Older German-keyed timeline.json files are read transparently. */
 (() => {
   const $ = (s) => document.querySelector(s);
   const video = $('#video');
@@ -21,6 +23,9 @@
   let AGENT = 'Claude';            // author of the change notes (decisions in timeline.json) and of the replies (field "reply")
   let PROJECT_TITLE = '';          // cut off at the front in the cut selector
   let LANG = 'en';
+  let FIXED_PERSON = false;        // the embedding app names the reviewer (app.person): never ask
+  let EMBEDDED = false;            // app.embedded: inside another app's page (iframe)
+  const ALT_COLOR = '#2dd4bf';     // places with alternatives on the timeline and in the panel
 
   const store = {
     get(k, def = null) { try { const v = localStorage.getItem('sf_' + k); return v === null ? def : v; } catch (e) { return def; } },
@@ -60,6 +65,7 @@
     rIn: null, rOut: null, loop: null, zoom: false, reverse: null,
     hover: null, drag: null, selected: null, infoKey: '', lastNr: null, timeText: '', positionText: '',
     notesData: null, notes: [], noteSelected: null, followPause: 0, nowKey: '',
+    alts: [], altKey: '', parentKey: '',
   };
 
   // ------------------------------------------------------------ helpers
@@ -103,9 +109,27 @@
     const people = Array.isArray(a.people) ? a.people.filter((p) => p && p.name) : [];
     NAME_SUGGESTIONS = people.map((p) => String(p.name));
     PERSON_COLORS = Object.fromEntries(people.filter((p) => p.color).map((p) => [String(p.name).toLowerCase(), String(p.color)]));
+    if (a.person) { S.name = String(a.person); FIXED_PERSON = true; $('#name-button').hidden = true; }
+    if (a.submit === false) $('#send').hidden = true;
+    EMBEDDED = a.embedded === true;
+    document.body.classList.toggle('embedded', EMBEDDED);
     chooseLanguage(new URLSearchParams(location.search).get('lang') || a.ui_language);
     translatePage();
   }
+  // embedded: the parent page learns which cut is shown and its comments (for its own buttons and counts)
+  function tellParent() {
+    if (!EMBEDDED || window.parent === window || !S.f) return;
+    const key = S.f + '|' + JSON.stringify(S.entries);
+    if (key === S.parentKey) return;
+    S.parentKey = key;
+    try {
+      window.parent.postMessage({ source: 'cutter-review', cut: S.f, open: S.entries.filter((e) => e.status === 'open').length,
+        entries: S.entries }, location.origin);
+    } catch (e) { /* parent on another origin */ }
+  }
+  const byTime = (p, q) => (p.t == null ? -1 : p.t) - (q.t == null ? -1 : q.t) || p.id - q.id;
+  // "Shorter at 2:17.0 (Nr. 27)" or "Shorter – whole film"
+  const said = (e) => (e.t == null ? `${describe(e)} – ${t('whole_film')}` : t('at', { what: describe(e), t: short(e.t), nr: e.nr }));
   function personColor(n) {
     const k = (n || '').toLowerCase();
     if (PERSON_COLORS[k]) return PERSON_COLORS[k];
@@ -160,7 +184,8 @@
   const musicAt = (x) => S.music.find((m) => m.start <= x && x < m.end) || null;
   const notesAt = (x) => S.notes.filter((d) => d.t != null && d.t - 1e-3 <= x && x < (d.t_to != null ? d.t_to : d.t + 2));
   // comments "at this point" while watching: their range, otherwise 4 s from the comment
-  const commentsAt = (x) => S.entries.filter((e) => e.t - 0.3 <= x && x < (e.t_to != null ? e.t_to : e.t + 4));
+  const commentsAt = (x) => S.entries.filter((e) => e.t != null && e.t - 0.3 <= x && x < (e.t_to != null ? e.t_to : e.t + 4));
+  const altAt = (x) => S.alts.find((p) => p.t - 1e-3 <= x && x < p.t_to) || null;
   const truncate = (s, n) => (s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + ' …' : s);
   function nearestEdit(x) {
     let best = null;
@@ -210,7 +235,7 @@
       o.value = f.id; sel.append(o);
     }
     if (!S.cuts.length) { $('#loading-hint').textContent = t('no_cuts'); return; }
-    const url = new URLSearchParams(location.search).get('f');
+    const q = new URLSearchParams(location.search), url = q.get('cut') || q.get('f');
     const newest = S.cuts[S.cuts.length - 1].id;
     const remembered = store.get('cut') || store.get('fassung');           // older key from the German version
     const known = String(store.get('cuts_seen', '') || store.get('fassungen_gesehen', '') || '').split(',').filter(Boolean);
@@ -226,7 +251,7 @@
       message(t('new_cut_opened', { cut: newest }), { label: t('back_to', { cut: remembered }),
         action: () => { sel.value = remembered; loadCut(remembered); } });
     }
-    if (!S.name) await askName();
+    if (!S.name && !FIXED_PERSON) await askName();
     $('#send-button').addEventListener('click', sendFeedback);
     setInterval(() => { if (!document.hidden) fetchEntries(); }, 2500);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) fetchEntries(); });
@@ -234,7 +259,7 @@
 
   async function loadCut(id) {
     S.f = id; store.set('cut', id);
-    const p = new URLSearchParams(location.search); p.set('f', id);
+    const p = new URLSearchParams(location.search); p.set('f', id); p.delete('cut');
     history.replaceState(null, '', '?' + p.toString() + location.hash);
     stopLoop(); stopReverse(); S.rIn = S.rOut = null;
     let tl;
@@ -249,6 +274,8 @@
     // the agent's change notes of this cut (from decisions.json); they appear in the list between the comments
     const dec = tl.decisions && Array.isArray(tl.decisions.entries) ? tl.decisions : null;
     Object.assign(S, { notesData: dec, notes: dec ? dec.entries : [], noteSelected: null, nowKey: '' });
+    S.alts = Array.isArray(tl.alternatives) ? tl.alternatives : [];
+    S.altKey = '';
     $('#entries').scrollTop = 0;
     $('#film-title').textContent = tl.title || t('app_title');
     document.title = t('page_title', { cut: id, title: shortTitle(tl.title) });
@@ -315,7 +342,7 @@
     const before = new Map(old.map((e) => [e.id, e]));
     const others = fresh.filter((e) => !before.has(e.id) && !own(e));
     const status = fresh.filter((e) => before.has(e.id) && before.get(e.id).status !== e.status && e.status !== 'open');
-    if (others.length === 1) message(`${others[0].person}: ${t('at', { what: describe(others[0]), t: short(others[0].t), nr: others[0].nr })}`);
+    if (others.length === 1) message(`${others[0].person}: ${said(others[0])}`);
     else if (others.length > 1) message(t('new_comments', { n: others.length }));
     else if (status.length) message(t(status.length === 1 ? 'status_changed_one' : 'status_changed', { n: status.length, status: statusText(status[0].status) }));
   }
@@ -449,15 +476,17 @@
     const field = $('#note');
     const note = text != null ? text : field.value.trim();
     if (!action && !reaction && !note) { field.focus(); return; }
-    const b = range(), x = b ? b.t : video.currentTime;
-    const body = { cut: S.f, t: r3(x), t_to: b && b.t_to != null ? r3(b.t_to) : null, action, reaction, text: note, person: S.name };
+    const b = range(), x = b ? b.t : video.currentTime, whole = $('#whole').checked;
+    const body = { cut: S.f, t: whole ? null : r3(x), t_to: !whole && b && b.t_to != null ? r3(b.t_to) : null, action, reaction,
+      text: note, person: S.name };
     if (action === 'cut_earlier' || action === 'cut_later') { const c = currentEdit(); if (c) body.edit_t = c.t; }
     try {
       const r = await api('POST', 'api/entries', body);
       field.value = ''; S.rIn = S.rOut = null; showRange();
-      S.entries.push(r.entry); S.entries.sort((p, q) => p.t - q.t || p.id - q.id);
+      if (whole) { $('#whole').checked = false; wholeChanged(); }
+      S.entries.push(r.entry); S.entries.sort(byTime);
       personFilter(); list(); draw();
-      message(t('saved', { what: describe(r.entry), t: short(r.entry.t), nr: r.entry.nr }),
+      message(r.entry.t == null ? t('saved_whole', { what: describe(r.entry) }) : t('saved', { what: describe(r.entry), t: short(r.entry.t), nr: r.entry.nr }),
         { label: t('undo'), action: () => remove(r.entry, true) });
     } catch (e) { message(t('not_saved', { msg: e.message }), { error: true }); }
   }
@@ -475,7 +504,8 @@
   function edit(e) {
     const d = $('#edit-dialog');
     video.pause(); stopReverse();
-    $('#edit-position').textContent = `${short(e.t)}${e.t_to != null ? '–' + short(e.t_to) : ''} · Nr. ${e.nr ?? '–'} · ${e.person}`;
+    $('#edit-position').textContent = e.t == null ? `${t('whole_film')} · ${e.person}`
+      : `${short(e.t)}${e.t_to != null ? '–' + short(e.t_to) : ''} · Nr. ${e.nr ?? '–'} · ${e.person}`;
     const sa = $('#edit-action'), sr = $('#edit-reaction');
     sa.textContent = ''; sr.textContent = '';
     sa.append(Object.assign(el('option', null, t('none_option')), { value: '' }));
@@ -491,7 +521,7 @@
       if ($('#edit-here').checked) { body.t = r3(video.currentTime); body.t_to = null; }
       try {
         const r = await api('PATCH', `api/entries/${e.id}`, body);
-        S.entries = S.entries.map((x) => (x.id === e.id ? r.entry : x)).sort((p, q) => p.t - q.t || p.id - q.id);
+        S.entries = S.entries.map((x) => (x.id === e.id ? r.entry : x)).sort(byTime);
         list(); draw(); message(t('changed'));
       } catch (err) { message(t('change_failed', { msg: err.message }), { error: true }); }
     };
@@ -502,7 +532,7 @@
   function select(e, from = video.currentTime) {
     S.selected = e.id;
     video.pause(); stopReverse();
-    const to = seek(e.t);
+    const to = e.t == null ? from : seek(e.t);
     list();
     const li = document.querySelector(`.entry[data-id="${e.id}"]`);
     if (li) li.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -542,7 +572,7 @@
     const comments = S.entries.filter(commentVisible), notes = notesVisible() ? S.notes : [];
     const items = [
       ...notes.map((d) => ({ note: d, t: d.t == null ? -1 : d.t })),
-      ...comments.map((e) => ({ comment: e, t: e.t })),
+      ...comments.map((e) => ({ comment: e, t: e.t == null ? -2 : e.t })),
     ].sort((p, q) => p.t - q.t || (p.note && !q.note ? -1 : q.note && !p.note ? 1 : 0));
     for (const p of items) ol.append(p.note ? noteEl(p.note) : commentEl(p.comment, nr));
     ol.scrollTop = top;
@@ -555,13 +585,15 @@
       empty.textContent = (S.filterPerson || S.filterStatus) && (S.entries.length || S.notes.length) ? t('list_empty_filter') : t('list_empty');
     }
     markNotes();
+    tellParent();
   }
   function commentEl(e, nr) {
-    const li = el('li', `entry ${e.status}${e.reply ? ' answered' : ''}${e.nr === nr ? ' here' : ''}${S.selected === e.id ? ' selected' : ''}`);
-    li.dataset.id = e.id; li.dataset.nr = e.nr;
+    const general = e.t == null;
+    const li = el('li', `entry ${e.status}${e.reply ? ' answered' : ''}${!general && e.nr === nr ? ' here' : ''}${S.selected === e.id ? ' selected' : ''}${general ? ' general' : ''}`);
+    li.dataset.id = e.id; li.dataset.nr = general ? '' : e.nr;
     li.style.setProperty('--person', personColor(e.person));
-    const when = el('div', 'when', short(e.t));
-    when.append(el('small', null, `Nr. ${e.nr ?? '–'}${e.nr_to ? '–' + e.nr_to : ''}`));
+    const when = el('div', 'when', general ? t('whole_film_short') : short(e.t));
+    if (!general) when.append(el('small', null, `Nr. ${e.nr ?? '–'}${e.nr_to ? '–' + e.nr_to : ''}`));
     if (e.t_to != null) when.append(el('small', null, t('until', { t: short(e.t_to) })));
     const content = el('div', 'content');
     const who = el('div', 'who', e.person);
@@ -572,6 +604,7 @@
     if (e.reaction) line.append(el('span', 'reaction', e.reaction));
     if (e.text) line.append(document.createTextNode(e.text));
     content.append(line);
+    if (e.alternative) content.append(el('span', 'alt-info', altChoiceText(e.alternative)));
     if (e.edit_point) content.append(el('span', 'cut-info', t('edit_at', { edit: editText(e.edit_point), t: short(e.edit_point.t) })));
     const tools = el('div', 'tools');
     if (own(e)) tools.append(button('✎', t('change'), () => edit(e)), button('🗑', t('delete'), () => remove(e, false)));
@@ -732,6 +765,11 @@
     position();
   }
   function position() {
+    if ($('#whole').checked) {
+      const txt = t('position_whole');
+      if (txt !== S.positionText) { S.positionText = txt; $('#position').textContent = txt; }
+      return;
+    }
     const b = range(), s = shotAt(b ? b.t : video.currentTime);
     const txt = b ? t('position_range', { nr: s ? s.nr : '–' }) : t('position_at', { t: short(video.currentTime), nr: s ? s.nr : '–' });
     if (txt !== S.positionText) { S.positionText = txt; $('#position').textContent = txt; }
@@ -750,6 +788,7 @@
     const m = musicAt(x), cw = (s.cutaways || []).find((y) => y.start <= x && x < y.end) || null, c = currentEdit();
     const notes = notesAt(x);
     showNow(x, notes);
+    showAlternatives(altAt(x));
     follow();
     const key = [S.f, LANG, s.nr, sz && sz.start, sub && sub.start, m && m.cue, cw && cw.start, c && c.t, !!S.loop,
       notes.map((d) => d.id).join(',')].join('|');
@@ -870,6 +909,15 @@
       ctx.fillStyle = S.loop ? '#f5b942' : 'rgba(255,255,255,.9)';
       ctx.beginPath(); ctx.moveTo(x - 5, yShot - 5); ctx.lineTo(x + 5, yShot - 5); ctx.lineTo(x, yShot + 1); ctx.closePath(); ctx.fill();
     }
+    // places with alternatives: a teal line along the top of their shots
+    const altNow = altAt(video.currentTime);
+    for (const p of S.alts) {
+      if (p.t_to < a || p.t > b) continue;
+      const x0 = X(p.t), x1 = Math.max(X(p.t_to), x0 + 3);
+      ctx.fillStyle = ALT_COLOR; ctx.globalAlpha = altNow === p ? 1 : 0.75;
+      ctx.fillRect(x0 + 1, yShot, Math.max(2, x1 - x0 - 2), altNow === p ? 4 : 3);
+      ctx.globalAlpha = 1;
+    }
     // decisions as violet brackets between the comment dots and the shots
     const nowNotes = new Set(notesAt(video.currentTime).map((d) => d.id));
     for (const d of S.notes) {
@@ -888,7 +936,7 @@
     // comments as dots (ring = done, violet core = reply from the agent)
     for (const e of S.entries) {
       const visible = commentVisible(e);
-      if (e.t < a - 1 || e.t > b + 1) continue;
+      if (e.t == null || e.t < a - 1 || e.t > b + 1) continue;
       const x = X(e.t), col = personColor(e.person);
       ctx.globalAlpha = visible ? 1 : 0.25;
       if (e.t_to != null) { ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, yDot); ctx.lineTo(X(e.t_to), yDot); ctx.stroke(); }
@@ -914,6 +962,7 @@
     const [a, b] = view(), x = ev.clientX - r.left;
     let best = null, bd = finger ? 14 : 8;
     for (const e of S.entries) {
+      if (e.t == null) continue;
       const d = Math.abs((e.t - a) / (b - a) * r.width - x);
       if (d < bd) { bd = d; best = e; }
     }
@@ -936,6 +985,8 @@
     if (p) txt.append(el('span', 'note', `${p.person}: ${describe(p)}`));
     if (p && p.reply) txt.append(el('span', 'tl-reply', t('tl_reply', { agent: AGENT, text: truncate(p.reply, 110) })));
     for (const d of notesAt(x)) txt.append(el('span', 'tl-note', `◆ ${d.title}`));
+    const alt = altAt(x);
+    if (alt) txt.append(el('span', 'tl-alt', t('alt_count', { n: alt.options.length })));
     if (tapped) txt.append(el('span', 'tip', t('drag_to_jump')));
     draw();
   }
@@ -945,9 +996,91 @@
     $('#tl-preview').hidden = true; S.hover = null; draw();
   }
 
+  function wholeChanged() {
+    const on = $('#whole').checked;
+    document.querySelector('.entry-form').classList.toggle('whole', on);
+    $('#note').placeholder = t(on ? 'note_placeholder_whole' : 'note_placeholder');
+    position();
+  }
+
+  // ------------------------------------------------------------ alternatives
+  // Where the agent weighed other clips or ranges (timeline.json "alternatives"): the options can be watched here,
+  // and "Take this" / "Keep as is" becomes a comment with the reference "<place>/<n>" or "<place>/keep" (one per
+  // reviewer and place: choosing again changes it).
+  const range2 = (a, b) => `${short(a)}–${short(b)}`;
+  function altChoiceText(ref) {
+    const [id, n] = String(ref).split('/'), p = S.alts.find((x) => x.id === id);
+    if (n === 'keep') return t('alt_kept');
+    const o = p && p.options.find((x) => String(x.n) === n);
+    return o ? t('alt_taken', { n, clip: o.clip, range: range2(o.in, o.out) }) : t('alt_taken_short', { n });
+  }
+  const myChoice = (p) => S.entries.find((e) => own(e) && e.alternative && e.alternative.split('/')[0] === p.id) || null;
+  function showAlternatives(p) {
+    const box = $('#alts'), mine = p && myChoice(p);
+    const key = [S.f, LANG, p ? p.id : '', mine ? mine.alternative + ':' + mine.id : ''].join('|');
+    if (key === S.altKey) return;
+    S.altKey = key;
+    for (const v of box.querySelectorAll('video')) v.pause();
+    box.textContent = '';
+    box.hidden = !p;
+    if (!p) return;
+    const head = el('div', 'alts-head');
+    head.append(el('span', 'alts-title', t('alt_title', { n: p.options.length })),
+      el('span', 'alts-where', p.nr_to && p.nr_to !== p.nr ? t('alt_shots', { a: p.nr, b: p.nr_to }) : t('alt_shot', { nr: p.nr ?? '–' })));
+    box.append(head);
+    if (p.reason) box.append(el('p', 'alts-reason', p.reason));
+    if (p.current && p.current.clip) {
+      box.append(el('p', 'alts-current', t('alt_current', { clip: p.current.clip, range: range2(p.current.in, p.current.out) })));
+    }
+    const chosen = mine ? mine.alternative.split('/')[1] : null;
+    const ol = el('ol', 'alts-options');
+    for (const o of p.options) {
+      const li = el('li', `alt-option${chosen === String(o.n) ? ' chosen' : ''}`);
+      if (o.file) {
+        const v = el('video');
+        v.controls = true; v.preload = 'none'; v.playsInline = true;
+        v.src = `media/${encodeURIComponent(S.f)}/${o.file}`;
+        if (o.poster) v.poster = `media/${encodeURIComponent(S.f)}/${o.poster}`;
+        v.addEventListener('play', () => {
+          video.pause(); stopReverse();
+          for (const w of box.querySelectorAll('video')) if (w !== v) w.pause();
+        });
+        li.append(v);
+      } else li.append(el('div', 'alt-missing', t('alt_no_preview')));
+      const text = el('div', 'alt-text');
+      text.append(el('b', null, `${o.n}. ${o.clip} · ${range2(o.in, o.out)}`));
+      if (o.why) text.append(el('span', null, o.why));
+      li.append(text);
+      const b = button(chosen === String(o.n) ? t('alt_chosen') : t('alt_take'), t('alt_take_title', { n: o.n, clip: o.clip }),
+        () => choose(p, o));
+      b.className = chosen === String(o.n) ? 'save' : '';
+      li.append(b);
+      ol.append(li);
+    }
+    box.append(ol);
+    const keep = button(chosen === 'keep' ? t('alt_kept') : t('alt_keep'), t('alt_keep_title'), () => choose(p, null));
+    keep.className = 'alt-keep' + (chosen === 'keep' ? ' save' : '');
+    box.append(keep);
+  }
+  async function choose(p, o) {
+    if (!S.name && !(await askName())) return;
+    const body = { cut: S.f, t: p.t, t_to: p.t_to, person: S.name, alternative: `${p.id}/${o ? o.n : 'keep'}`,
+      action: o ? 'other_shot' : null,
+      text: o ? t('alt_take_text', { n: o.n, clip: o.clip, range: range2(o.in, o.out) }) : t('alt_keep_text') };
+    try {
+      const r = await api('POST', 'api/entries', body);
+      S.entries = S.entries.filter((x) => x.id !== r.entry.id);
+      S.entries.push(r.entry); S.entries.sort(byTime);
+      S.altKey = '';
+      personFilter(); list(); info(); draw();
+      message(o ? t('alt_saved', { n: o.n }) : t('alt_kept_saved'));
+    } catch (e) { message(t('not_saved', { msg: e.message }), { error: true }); }
+  }
+
   // ------------------------------------------------------------ dialogs and messages
   function showName() { const b = $('#name-button'); b.textContent = S.name || t('name_button'); b.style.color = S.name ? personColor(S.name) : ''; }
   function askName() {
+    if (FIXED_PERSON) return Promise.resolve(!!S.name);
     return new Promise((resolve) => {
       const d = $('#name-dialog'), inp = $('#name-input'), box = $('#name-suggestions');
       box.textContent = '';
@@ -1103,6 +1236,8 @@
     document.addEventListener('pointerdown', (ev) => { if (previewTimer && ev.target !== cv) hidePreview(); }, true);
     new ResizeObserver(() => draw()).observe(cv);
 
+    // a note about the whole film instead of the current position
+    $('#whole').addEventListener('change', (ev) => { ev.target.blur(); wholeChanged(); });
     // note: pause while typing
     const note = $('#note');
     note.addEventListener('input', () => { if (!video.paused) video.pause(); stopReverse(); });

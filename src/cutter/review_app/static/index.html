@@ -74,6 +74,7 @@
       <div class="quick" id="quick"></div>
       <form class="note-form" id="note-form" autocomplete="off">
         <div class="reactions" id="reactions"></div>
+        <label class="whole-choice" data-i18n-title="whole_title" title="The note is about the whole film, not the current position"><input type="checkbox" id="whole"> <span data-i18n="whole">Whole film</span></label>
         <input type="text" id="note" maxlength="2000" data-i18n-placeholder="note_placeholder" data-i18n-aria="note_aria" placeholder="Note on the current position … (N)" enterkeyhint="send" aria-label="Note">
         <button type="submit" class="save" data-i18n="save">Save</button>
       </form>
@@ -92,6 +93,8 @@
       <p class="cut-note" id="info-note"></p>
       <div class="info-now" id="info-now" hidden></div>
     </aside>
+
+    <section class="alts" id="alts" aria-live="polite" hidden></section>
 
     <section class="list">
       <div class="list-head">
@@ -151,6 +154,7 @@
     <p data-i18n-html="help_change_html"></p>
     <p data-i18n-html="help_reply_html"></p>
     <p data-i18n-html="help_now_html"></p>
+    <p data-i18n-html="help_alts_html"></p>
     <div class="buttons"><button type="submit" class="save" data-i18n="close">Close</button></div>
   </form>
 </dialog>
