@@ -346,6 +346,18 @@ def export_scale(height):
     return ["--scale", f"{h / 1080:.6g}"]
 
 
+def _clip_paths(p):
+    """{clip ID: file} to render previews from: the proxy where there is a current one, else the clip itself."""
+    from . import proxies, timeline
+    if not p.path("clips").exists():
+        return {}
+    clips = timeline.resolve_clips({c["id"]: c for c in read_json(p.path("clips"))}, p.media_roots())
+    paths = {cid: c.get("path") for cid, c in clips.items()}
+    if proxies.load(p.path("proxies")):
+        paths.update({cid: x["path"] for cid, x in proxies.table(list(clips.values()), p.path("proxies"))[0].items()})
+    return paths
+
+
 def c_review_data(a, out):
     p = _project(a)
     from . import review_data
@@ -354,18 +366,20 @@ def c_review_data(a, out):
     otio = pathlib.Path(str(p.path("timeline", cut)) + ".otio")
     target = p.path("review_media") / "cuts"
     dec = p.path("decisions", cut)
+    alt = p.path("alternatives", cut)
     video = a.video
     if video is None and not a.rough and (p.path("exports") / f"{cut}.mp4").exists():
         video = str(p.path("exports") / f"{cut}.mp4")
     if a.dry_run:
         return _dry(out, {"edit": str(edit), "otio": str(otio), "target": str(target / cut), "video": video,
-                          "decisions": str(dec) if dec.exists() else None},
+                          "decisions": str(dec) if dec.exists() else None, "alternatives": str(alt) if alt.exists() else None},
                     f"  {edit} + {otio}" + (f" + {dec}" if dec.exists() else "") + f"\n  video: {video or 'rough render'}\n  -> {target / cut}")
     os.environ["CUTTER_JSON"] = "1" if out.as_json else ""
     r = review_data.create(cut, edit, otio, target, p.path("transcripts"), video=video, decisions_path=dec if dec.exists() else None,
                            numbers_in_export=a.numbers, no_numbers=a.no_numbers, timeline_only=a.timeline_only, jobs=a.jobs,
                            ns=p.otio_namespace, external=p.external_clip_ids(), fade_out=p["music"]["fade_out_s"],
                            height=int(p["filmcraft"].get("export_height") or 0) or None,
+                           alternatives_path=alt if alt.exists() else None, clip_paths=_clip_paths(p) if alt.exists() else None,
                            levels={"base": p["music"]["base_lufs"], "under": p["music"]["under_dialogue_lufs"], "low": p["music"]["low_lufs"]})
     from .deploy import write_app_config
     write_app_config(p, p.path("review"))

@@ -28,6 +28,13 @@ cutter feedback fetch            # newest cut -> .cutter/review/feedback-<cut>.j
 Only feedback on the **newest** cut counts; comments on older cuts were answered then. Read every entry: time,
 shot number (`nr`), action (shorter, remove, other_shot, music_softer, question, …), text, person.
 
+- **General comments** have no time (`"t": null`): they are about the whole film (pace, length, tone, music).
+  Apply them throughout and answer them like the others.
+- **Choices among alternatives** carry `"alternative": "<place>/<n>"` or `"<place>/keep"`, where `<place>` is an
+  `id` of the previous cut's `alternatives.json`. `<n>` means: use option n of that place (its `clip`, `in`, `out`)
+  instead of what is there, fitted to the place (length, beat); `keep` means the reviewer saw the options and wants
+  the cut as it is. Apply them exactly and say so in the reply.
+
 ## 2. Decide
 
 Group the comments by place. For each, decide: do it, do it differently, or not (with a reason). When reviewers
@@ -49,6 +56,10 @@ Write `cuts/cut3/decisions.json` (format: [docs/formats.md](../../../docs/format
 per change or decision, placed in the new cut (`t`/`t_to`, `nr`/`nr_to`, `cut_before` or `music`), with `title`,
 `text`, `why`, an optional `question` for the reviewers and `refs` to the comments it answers. The review app shows
 these notes in violet at their places.
+
+Write `cuts/cut3/alternatives.json` for the new cut as in the first cut (first-cut.md, “Alternatives”): the places
+where you weighed other clips or ranges this time, with the shot numbers of the new cut. Do not offer again what a
+reviewer already chose or rejected.
 
 ## 5. Render and publish
 

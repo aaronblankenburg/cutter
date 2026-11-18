@@ -40,6 +40,7 @@ DEFAULTS = {
         "cut": "cuts/{cut}",
         "edit": "cuts/{cut}/edit.json",
         "decisions": "cuts/{cut}/decisions.json",
+        "alternatives": "cuts/{cut}/alternatives.json",
         "plan": "cuts/{cut}/plan.py",
         "timeline": "cuts/{cut}/{cut}",
         "work": "cuts/{cut}/work",

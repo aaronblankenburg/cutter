@@ -76,6 +76,16 @@ cutter filmcraft export cut1
 cutter review-data cut1
 ```
 
+### Alternatives
+
+Where you really weighed candidates for a place – another take, another clip with the same content, a different
+range of the same clip – record up to 3 of them in `cuts/cut1/alternatives.json` (format:
+[docs/formats.md](../../../docs/formats.md#alternativesjson)). Only real choices: not every shot, and never fillers
+to reach three. Each place names its shot (`nr`, or `nr`/`nr_to` for a run of shots), a `reason` (what the place
+needs, why it was a close call) and `options` with `clip`, `in`/`out` (seconds of the clip, about the length the
+place would have) and a short `why`. `cutter review-data` renders a small preview of every option; reviewers watch
+them next to the cut and answer with “Take this” or “Keep as is”.
+
 With proxies (`cutter analyze --proxies`, worth it for 4K or HEVC footage) build the cuts for review as drafts:
 `cutter timeline cut1 --proxies`, the rest as above. They cut at the same frames and render much faster, at the
 picture quality of the proxies. Only the film the user accepts is built from the footage:

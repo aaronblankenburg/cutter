@@ -4,9 +4,10 @@ Writes to <review data>/cuts/<CUT>/:
   review.mp4                 at most 720p (an export of 720 lines or fewer keeps its size), 25 fps, H.264/AAC (at most 2.5 Mbit/s), keyframe every 2 s, faststart
   thumbs_NN.jpg, thumbs.vtt  thumbnails every 2 s as sprites with WebVTT (#xywh=...)
   poster.jpg                 still frame shown before the video loads
+  alt-<place>-<n>.mp4/.jpg    a short preview (and its poster) of every option in alternatives.json
   timeline.json              shots (nr, start, end, clip, section, kind, note, spoken text), cuts, sections, music,
-                             subtitles, markers and, if present, the changes and decisions from decisions.json;
-                             written last
+                             subtitles, markers and, if present, the changes and decisions from decisions.json and
+                             the alternatives from alternatives.json; written last
 
 Video:
   video=<file.mp4>   FilmCraft export (H.264 at 25 fps up to 720 lines is only remuxed; anything else is converted to
@@ -42,6 +43,8 @@ FONT = next((p for p in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 # "fade_out_s" on a cue in edit.json overrides. Without a value the music stops hard.
 MUSIC_BASE, MUSIC_UNDER, MUSIC_LOW = -16.0, -35.0, -40.0
 VERSION_RE = re.compile(r"[A-Za-z0-9_-]{1,32}")
+PLACE_RE = re.compile(r"[A-Za-z0-9_-]{1,40}")
+MAX_OPTIONS, MAX_PREVIEW_S, PREVIEW_H = 3, 30.0, 360
 
 
 def run(cmd, **kw):
@@ -270,6 +273,86 @@ def without_internal(obj):
     if isinstance(obj, list):
         return [without_internal(v) for v in obj]
     return obj
+
+
+def alternatives(path, tl, clip_paths):
+    """The places of alternatives.json (where the agent weighed other clips or ranges) for the app, with the time of
+    their shot(s) in this cut and the source of every option. clip_paths: {clip ID: file} to render the previews."""
+    d = read_json(path)
+    places = d.get("places", []) if isinstance(d, dict) else d
+    shots = {s["nr"]: s for s in tl["shots"]}
+
+    def fail(text):
+        raise CutterError(f"{pathlib.Path(path).name}: {text}", MISSING)
+    out, ids = [], set()
+    for x in places:
+        pid = str(x.get("id") or "")
+        if not PLACE_RE.fullmatch(pid) or pid in ids:
+            fail(f"every place needs its own id of letters, digits, - and _ ({pid!r})")
+        ids.add(pid)
+        if "nr" in x:
+            a, b = shots.get(x["nr"]), shots.get(x.get("nr_to", x["nr"]))
+            if not a or not b or b["end"] <= a["start"]:
+                fail(f"{pid}: shot {x['nr']} to {x.get('nr_to', x['nr'])} does not exist in the timeline")
+            t, t_to = a["start"], b["end"]
+        elif "t" in x:
+            t, t_to = float(x["t"]), float(x.get("t_to", x["t"]))
+        else:
+            fail(f"{pid}: give the shot (nr) or the time (t, t_to) of the place")
+        opts = x.get("options") or []
+        if not opts or len(opts) > MAX_OPTIONS:
+            fail(f"{pid}: 1 to {MAX_OPTIONS} options")
+        shot = shots.get(x.get("nr")) or {}
+        place = {"id": pid, "nr": x.get("nr"), "nr_to": x.get("nr_to"), "t": round(t, 3), "t_to": round(t_to, 3),
+                 "reason": x.get("reason") or "",
+                 "current": {"clip": shot.get("clip"), "in": shot.get("source_in"), "out": shot.get("source_out")},
+                 "options": []}
+        for n, o in enumerate(opts, 1):
+            try:
+                a_, b_ = float(o["in"]), float(o["out"])
+            except (KeyError, TypeError, ValueError):
+                fail(f"{pid} option {n}: clip, in and out (seconds of the clip) are needed")
+            if not o.get("clip") or b_ <= a_:
+                fail(f"{pid} option {n}: clip, in and out (seconds of the clip, out after in) are needed")
+            place["options"].append({"n": n, "clip": str(o["clip"]), "in": round(a_, 3), "out": round(b_, 3),
+                                     "why": o.get("why") or "", "file": None, "poster": None,
+                                     "_path": (clip_paths or {}).get(str(o["clip"]))})
+        out.append(place)
+    return out
+
+
+def alternative_previews(places, folder, old_places=()):
+    """alt-<place>-<n>.mp4 (at most 360 lines, with sound) and .jpg for every option; kept when the option did not
+    change since the last run. Options whose clip is not found keep file None."""
+    old = {(p["id"], o["n"]): o for p in old_places for o in p.get("options", [])}
+    keep = set()
+    for p in places:
+        for o in p["options"]:
+            name = f"alt-{p['id']}-{o['n']}"
+            mp4, jpg = folder / f"{name}.mp4", folder / f"{name}.jpg"
+            was = old.get((p["id"], o["n"])) or {}
+            same = all(was.get(k) == o[k] for k in ("clip", "in", "out")) and was.get("file") and mp4.exists() and jpg.exists()
+            if not same:
+                if not o["_path"] or not os.path.exists(o["_path"]):
+                    log(f"  Alternative {p['id']}/{o['n']}: clip {o['clip']} not found, no preview")
+                    continue
+                dur = min(o["out"] - o["in"], MAX_PREVIEW_S)
+                try:
+                    run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{o['in']:.3f}", "-t", f"{dur:.3f}", "-i", o["_path"],
+                         "-map", "0:v:0", "-map", "0:a:0?", "-vf", f"scale=-2:'min({PREVIEW_H},ih)',fps={FPS},format=yuv420p",
+                         "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "96k", "-ac", 2,
+                         "-movflags", "+faststart", mp4], capture_output=True)
+                    run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{dur / 2:.2f}", "-i", mp4, "-frames:v", 1,
+                         "-q:v", 4, jpg], capture_output=True)
+                except subprocess.CalledProcessError as ex:
+                    log(f"  Alternative {p['id']}/{o['n']}: no preview ({(ex.stderr or b'').decode(errors='replace').strip()[:200]})")
+                    continue
+            o["file"], o["poster"] = mp4.name, jpg.name
+            keep |= {mp4.name, jpg.name}
+    for f in list(folder.glob("alt-*.mp4")) + list(folder.glob("alt-*.jpg")):
+        if f.name not in keep:
+            f.unlink()
+    return sum(1 for p in places for o in p["options"] if o["file"])
 
 
 # ---------------------------------------------------------------- video
@@ -517,9 +600,10 @@ def thumbnails(video, folder, duration):
 
 def create(version, edit_path, otio_path, target, transcripts, video=None, decisions_path=None, numbers_in_export=False,
            no_numbers=False, timeline_only=False, jobs=None, ns="cutter", external=("TXT",), fade_out=None, levels=None,
-           height=None):
+           height=None, alternatives_path=None, clip_paths=None):
     """Write the review data of one version. decisions_path: changes and decisions (None = none). height: lines of a
-    rough render below 720 (e.g. 360 when the clips are 360p stand-ins). Returns a report."""
+    rough render below 720 (e.g. 360 when the clips are 360p stand-ins). alternatives_path: the agent's alternatives
+    (None = none), rendered as previews from clip_paths {clip ID: file}. Returns a report."""
     if not VERSION_RE.fullmatch(version):
         raise CutterError("Cut names use letters, digits, - and _ (for example cut4)", 2)
     edit_path, otio_path, target = pathlib.Path(edit_path), pathlib.Path(otio_path), pathlib.Path(target)
@@ -530,6 +614,8 @@ def create(version, edit_path, otio_path, target, transcripts, video=None, decis
         raise CutterError(f"Video not found: {video}", MISSING)
     if decisions_path is not None and not pathlib.Path(decisions_path).exists():
         raise CutterError(f"Not found: {decisions_path}", MISSING)
+    if alternatives_path is not None and not pathlib.Path(alternatives_path).exists():
+        raise CutterError(f"Not found: {alternatives_path}", MISSING)
     jobs = jobs or min(8, os.cpu_count() or 2)
     edit = edit_from_legacy(read_json(edit_path))[0]
     otio = read_json(otio_path)
@@ -548,6 +634,20 @@ def create(version, edit_path, otio_path, target, transcripts, video=None, decis
         tl["source"]["decisions"] = decisions_path.name
     video_target = folder / "review.mp4"
     old_tl = folder / "timeline.json"
+    previous = {}
+    if old_tl.exists():
+        try:
+            previous = read_json(old_tl)
+        except (OSError, ValueError):
+            previous = {}
+    if alternatives_path is not None:
+        alternatives_path = pathlib.Path(alternatives_path)
+        tl["alternatives"] = alternatives(alternatives_path, tl, clip_paths)
+        tl["source"]["alternatives"] = alternatives_path.name
+        n = alternative_previews(tl["alternatives"], folder, previous.get("alternatives") or ())
+        log(f"  {len(tl['alternatives'])} places with alternatives, {n} previews")
+    else:
+        alternative_previews([], folder)
     if timeline_only:
         if old_tl.exists():
             from .legacy import timeline_from_legacy
@@ -589,6 +689,8 @@ def create(version, edit_path, otio_path, target, transcripts, video=None, decis
     report = {"version": version, "folder": str(folder), "timeline": str(old_tl), "shots": len(tl["shots"]),
               "with_text": spoken, "edit_points": len(tl["edit_points"]), "music": len(tl["music"]), "subtitles": len(tl["subtitles"]),
               "duration": tl["duration"], "video": str(video_target) if video_target.exists() else None}
+    if "alternatives" in tl:
+        report["alternatives"] = len(tl["alternatives"])
     if "decisions" in tl:
         ent = tl["decisions"]["entries"]
         log(f"  {len(ent)} changes/decisions from {decisions_path.name} ({sum(1 for x in ent if x['question'])} with a question)")

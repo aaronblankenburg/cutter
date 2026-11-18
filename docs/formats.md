@@ -5,7 +5,8 @@ otherwise. Files written by the earlier German-keyed version of the pipeline are
 [Files from earlier versions](#files-from-earlier-versions).
 
 Contents: [cutter.toml](#cuttertoml) · [clips.json](#clipsjson) · [transcripts](#transcripts) ·
-[music.json](#musicjson) · [edit.json](#editjson) · [decisions.json](#decisionsjson) · [plan.py](#planpy) ·
+[music.json](#musicjson) · [edit.json](#editjson) · [decisions.json](#decisionsjson) ·
+[alternatives.json](#alternativesjson) · [plan.py](#planpy) ·
 [timelines](#timelines) · [filmcraft.json](#filmcraftjson) · [timeline.json (review app)](#timelinejson-review-app) ·
 [feedback export](#feedback-export) · [replies](#replies) · [maps](#maps) · [earlier versions](#files-from-earlier-versions)
 
@@ -81,6 +82,7 @@ export_height = 360             # export at 360 lines (--scale 1/3 of the 1080-l
 [paths]                         # where files go; {cut} becomes the cut name. The defaults:
 # clips = "analysis/clips.json"   transcripts = "analysis/transcripts"   music_analysis = "music/music.json"
 # edit = "cuts/{cut}/edit.json"   decisions = "cuts/{cut}/decisions.json"   timeline = "cuts/{cut}/{cut}"
+# alternatives = "cuts/{cut}/alternatives.json"
 # exports = "exports"   review = ".cutter/review/data"   htpasswd = ".cutter/review/htpasswd"
 # review_media = ""      the rendered cuts of the review app (cuts/<cut>/); empty: inside review, next to the comments
 ```
@@ -335,6 +337,27 @@ Place an entry with `t`/`t_to` (seconds in this cut), `nr`/`nr_to` (shots of thi
 shot n, ±2 s) or `music` (a cue). Entries without a place are general notes. Every entry needs a unique `id` and a
 `title`; `refs` point to the comments it answers.
 
+## alternatives.json
+
+`cuts/<cut>/alternatives.json` (optional) lists the places of a cut where the agent weighed other clips or ranges –
+only real candidates, at most 3 per place. `cutter review-data` renders a preview of every option and puts the places
+into timeline.json; the review app shows them next to the cut, where reviewers choose one or keep the cut as it is.
+
+```json
+{"places": [
+  {"id": "arrival", "nr": 12, "reason": "Two takes of the arrival at the camp; the one in the cut is shorter.",
+   "options": [{"clip": "C047", "in": 3.0, "out": 9.5, "why": "The car arriving, steadier picture"},
+               {"clip": "C012", "in": 20.0, "out": 26.0, "why": "Wide shot with the sunset"}]}]}
+```
+
+A place is a shot (`nr`, optionally to `nr_to`) or a time of the cut (`t`, `t_to`); `id` (letters, digits, `-`, `_`)
+is unique in the file. An option names `clip` (ID in clips.json), `in` and `out` in seconds of the clip, and `why`.
+The previews (`alt-<id>-<n>.mp4`, at most 360 lines with sound, at most 30 s, and `alt-<id>-<n>.jpg`) are taken from
+the proxy of the clip if there is one, else from the clip; unchanged options are not rendered again.
+
+A reviewer's choice is a comment with `"alternative": "<id>/<n>"` (use option n instead) or `"<id>/keep"` (keep the
+cut as it is), see the [feedback export](#feedback-export); the next cut applies it.
+
 ## plan.py
 
 `cuts/<cut>/plan.py` turns the previous cut's edit list into this cut's: `cutter plan cut3` runs
@@ -399,13 +422,20 @@ Optional; named by `[filmcraft] config` in cutter.toml. All keys are optional an
  "music": [{"cue", "title", "artist", "license", "file", "start", "end", "source_start", "fade_out_s", "bpm", "note"}],
  "subtitles": [{"start", "end", "text"}], "markers": [{"name", "t", "duration"}],
  "decisions": {"title", "intro", "compared_to", "date", "entries": [{"id", "title", "t", "t_to", "text", "why", "question", "refs", "kind"}]},
+ "alternatives": [{"id", "nr", "nr_to", "t", "t_to", "reason", "current": {"clip", "in", "out"},
+                   "options": [{"n", "clip", "in", "out", "why", "file", "poster"}]}],
  "video": {"file", "width", "height", "fps", "duration", "numbers_burned_in"},
  "thumbnails": {"vtt", "interval", "width", "height", "count"}, "poster": "poster.jpg",
- "source": {"edit", "otio", "video", "video_kind", "decisions"}, "created": "…"}
+ "source": {"edit", "otio", "video", "video_kind", "decisions", "alternatives"}, "created": "…"}
 ```
 
 Next to it: `review.mp4` (at most 720p; an export of 720 lines or fewer keeps its size; shot numbers are burned into rough renders), `thumbs_NN.jpg` with `thumbs.vtt`, and
-`poster.jpg`. `data/project.json` holds the title, reviewers, the agent's name and the UI language.
+`poster.jpg`, and the previews of the alternatives (`alt-<id>-<n>.mp4`/`.jpg`; `file`/`poster` are null when the clip
+was not found). In `alternatives`, `t`/`t_to` are the place in this cut, `current` is what the cut uses there.
+`data/project.json` holds the title, reviewers, the agent's name and the UI language; an app that embeds the review
+frontend may add `"person"` (fixed reviewer name), `"submit": false` (no “Send feedback”) and `"embedded": true`
+(no brand in the header, full width; the page then posts `{source: "cutter-review", cut, open, entries}` to its parent
+window whenever the cut or its comments change). `?cut=<id>` in the page URL opens that cut.
 
 ## Feedback export
 
@@ -417,9 +447,13 @@ Next to it: `review.mp4` (at most 720p; an export of 720 lines or fewer keeps it
  "actions": {"shorter": "Shorter", …},
  "entries": [{"id": 12, "t": 8.2, "t_to": null, "nr": 2, "nr_to": null, "clip": "C002", "source_t": 3.1,
               "cutaway": null, "section": "Opening", "music": "M1", "edit_point": null, "action": "shorter",
-              "action_text": "Shorter", "text": "Too slow here", "reaction": null, "person": "Alice",
-              "status": "open", "reply": null, "created": "…", "changed": "…"}]}
+              "action_text": "Shorter", "text": "Too slow here", "reaction": null, "alternative": null,
+              "person": "Alice", "status": "open", "reply": null, "created": "…", "changed": "…"}]}
 ```
+
+An entry with `"t": null` is about the whole film (no shot, clip, section or music; listed first). `"alternative"`
+is a reviewer's choice among the alternatives of the cut ([alternatives.json](#alternativesjson)): `"<id>/<n>"`
+means use option n of that place, `"<id>/keep"` keep the cut as it is; one per reviewer and place.
 
 `cutter feedback wait` prints the same result as `fetch` plus the request it took, when a reviewer sent the
 feedback off with the button in the review app (`"request": null` when nothing was sent off):

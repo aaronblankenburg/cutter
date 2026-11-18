@@ -55,7 +55,7 @@ cutter analyze                              # transcripts, contact sheets, quali
                                             # 4K or HEVC footage: add --proxies, then cutter timeline <cut> --proxies
                                             # for fast drafts; the accepted film is built without it (first-cut.md)
 cutter music license && cutter music analyze
-# write cuts/cut1/edit.json and cuts/cut1/decisions.json
+# write cuts/cut1/edit.json, cuts/cut1/decisions.json and, where you weighed other takes, alternatives.json
 cutter retime cut1 && cutter timeline cut1
 cutter filmcraft build cut1 && cutter filmcraft export cut1
 cutter review-data cut1
@@ -69,7 +69,9 @@ cutter feedback wait --json                 # in the background: returns when a 
 Follow [references/next-cut.md](references/next-cut.md): wait for the reviewers to send their feedback off
 (`cutter feedback wait` in the background) or fetch the feedback on the newest cut, write
 `cuts/cut<n>/plan.py` (the changes as code) and `decisions.json` (why, at the right moment in the film), render,
-publish, reply to every comment, and wait for the next round.
+publish, reply to every comment, and wait for the next round. In both kinds of cut, record in
+`cuts/cut<n>/alternatives.json` the places where you really weighed other clips or ranges (at most 3 options
+each); the review app lets the reviewers watch them and choose.
 
 ## 5. When something fails
 

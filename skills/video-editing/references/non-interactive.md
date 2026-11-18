@@ -25,11 +25,15 @@ answer a question, so never ask one and never wait for an answer.
 - **Not in this mode:** `cutter serve`, `cutter deploy`, `cutter review password`, the FilmCraft desktop app,
   deleting anything you did not create in this session. The tool publishes the cut; your last step is
   `cutter review-data <cut>`.
-- **Answer every review comment** of the previous cut (next-cut.md, step "Reply") in the language of that comment.
+- **Answer every review comment** of the previous cut (next-cut.md, step "Reply") in the language of that comment,
+  general ones (`"t": null`) and choices among alternatives (`"alternative"`) included.
+- **Alternatives** are how the user, who may not know the footage any more, sees what else there was: record the
+  real candidates (first-cut.md, “Alternatives”), with `why` texts in the user's language.
 
 ## Done means
 
-- first cut: `cuts/cut1/edit.json` and `decisions.json`, the timeline, the FilmCraft export and the review data;
+- first cut: `cuts/cut1/edit.json` and `decisions.json` (plus `alternatives.json` where you weighed other clips
+  or ranges), the timeline, the FilmCraft export and the review data;
 - next cut: the same for the new cut, plus the replies to all comments of the previous one.
 
 End with a short summary of the cut (length, sections, music, assumptions). If you cannot finish (for example the
