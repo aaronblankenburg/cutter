@@ -48,7 +48,7 @@ generated, so no media is checked in.
 **Inside the image:**
 
 ```sh
-docker run --rm --entrypoint python ghcr.io/aaronblankenburg/cutter:0.8.0 -m unittest discover -s /opt/cutter/tests
+docker run --rm --entrypoint python ghcr.io/aaronblankenburg/cutter:0.8.1 -m unittest discover -s /opt/cutter/tests
 ```
 
 ### Local reference tests
