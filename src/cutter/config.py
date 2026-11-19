@@ -107,6 +107,11 @@ DEFAULTS = {
     "standins": {
         "sidecars": "",         # folder with the sidecars of the stand-in files in [media] (see standin.py)
     },
+    "analysis": {
+        # what cutter analyze runs besides the picture quality: transcripts (Whisper), faces (and who is who),
+        # objects (people, vehicles, animals), tags (CLIP: what is in the picture), sound, scenes
+        "parts": ["transcripts", "faces", "objects", "tags", "sound", "scenes"],
+    },
     "proxies": {
         "make": False,          # true: every cutter analyze makes the missing proxies (as --proxies does)
         "height": 720,

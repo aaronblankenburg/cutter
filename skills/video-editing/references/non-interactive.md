@@ -17,7 +17,7 @@ answer a question, so never ask one and never wait for an answer.
   `"frame"` in edit.json only when the briefing asks for another format for this cut. For reels follow "Formats" in
   first-cut.md.
 - **The user's selection** (`selects.json`, also summarised in briefing.md): favourites to use where they fit,
-  rejects to leave out (first-cut.md, “The story”).
+  rejects to leave out, the user's own tags for clips and ranges (first-cut.md, “The story”).
 - **Decide missing points yourself** and record every assumption in the cut's `decisions.json` as an entry with
   `"kind": "assumption"`: a short `title`, `text` (what you assumed) and `why`. The review shows them, so the user
   can correct you in the next cut. Examples: target length not given, style unclear, which take of two to use.

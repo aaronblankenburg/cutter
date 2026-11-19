@@ -3,8 +3,9 @@
 Writes one file <out>/<ID>.json per clip of clips.json with
   scenes      scene boundaries (PySceneDetect, ContentDetector)
   per_second  per second: sharpness, exposure, colour, shake, camera pan and zoom, motion (OpenCV), faces, people,
-              objects and the shot size they imply (YuNet, YOLOX), sound level and wind; optionally CLIP tags and
-              audio events (PANNs) when torch, open_clip and panns_inference are installed
+              objects and the shot size they imply (YuNet, YOLOX), sound level and wind; what is in the picture
+              (content_tags.py, CLIP, a pass of its own); optionally audio events (PANNs) when torch and
+              panns_inference are installed
   camera      the camera moves as segments (static, handheld, shaky, pan, tilt, push in, pull out), to 0.2 s
   usable      the ranges worth cutting from; flaws: the rest with the reason (soft, shaky, whip, dark, clipped)
   audio       loudness, peak, and the ranges of speech, silence, wind and clipping
@@ -13,9 +14,13 @@ Writes one file <out>/<ID>.json per clip of clips.json with
               same person across clips -> <analysis>/people.json
   summary     the figures of the clip, also in <out>/_index.json; similar: clips that look like another take
 and <analysis>/quality.txt, the same for reading: a few lines per clip. The retime step uses sharpness, shake and
-exposure to avoid flawed seconds. CPU is enough. The three models (57 MB) are downloaded once into the model volume,
-checksum verified; without them faces, people, objects and who is who are left out.
-The tag list for CLIP comes from cutter.toml → image_analysis.content_tags (neutral defaults below).
+exposure to avoid flawed seconds. CPU is enough. The models (57 MB, and 155 MB for CLIP) are downloaded once into the
+model volume, checksum verified; without them faces, people, objects, who is who and the content tags are left out.
+
+What runs is chosen with `parts` (cutter.toml [analysis] parts, or cutter analyze --parts): "faces" (faces and who is
+who), "objects" (people, vehicles, animals …), "tags" (CLIP content tags), "sound" (loudness, wind, speech ranges),
+"scenes" (scene cuts); sharpness, exposure, camera moves and the usable ranges always run. Each clip's file lists the
+parts it was made with ("parts"); a part asked for later is added by analysing the clip again (tags: only the tags).
 """
 import hashlib
 import json
@@ -29,26 +34,11 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 from . import quality
-from .util import CutterError, MISSING, dump_json, log, lufs, read_json
+from .util import CutterError, MISSING, USAGE, dump_json, log, lufs, read_json
 
 VERSION = 3             # of the per-clip file; older files are measured again
 
-CONTENT_TAGS = {
-    "landscape": "a wide landscape", "road": "an asphalt road", "street": "a town street with buildings",
-    "beach": "a sandy beach", "sea": "the sea with waves", "forest": "a forest", "mountains": "mountains",
-    "desert": "sand dunes in the desert", "sky": "mostly sky", "sunset": "a sunset sky with the low sun",
-    "night": "a very dark night scene", "indoor": "a room interior", "vehicle": "a car, truck or bus",
-    "group": "a group of people", "hands": "hands holding something", "food": "food on a table",
-}
-SHOT_TAGS = {
-    "close-up hands": "a close-up shot of hands doing something", "detail": "an extreme close-up of an object",
-    "face": "a close-up shot of a person's face", "medium": "a medium shot of a person from the waist up",
-    "full": "a full shot of a person from head to toe", "wide": "a wide shot of a small person in a large landscape",
-    "empty landscape": "an empty landscape without people", "over the shoulder": "an over-the-shoulder shot",
-    "selfie": "a selfie of a person holding the camera at arm's length", "low angle": "a low angle shot from the ground looking up",
-    "high angle": "a high angle shot looking down", "ground camera": "a camera lying flat on the ground",
-    "silhouette": "a dark silhouette against a bright sky",
-}
+from .content_tags import CONTENT_TAGS, SHOT_TAGS  # noqa: E402,F401 – kept importable here
 SAMPLE_FPS = 5          # frames per second for the OpenCV measures
 DETECT_W = 640          # working width for faces and objects (one frame per second)
 SIGNATURE = 24          # frames per clip that are compared to find other takes
@@ -72,7 +62,8 @@ UNITS = {"sharpness": "variance of the Laplacian at 480 px width (higher = sharp
          "tags/shot_size": "CLIP ViT-B/32, probability within the tag list",
          "audio": "PANNs Cnn14 (SED), highest probability within the second"}
 
-MODELS = {  # name: (file, MB, sha256, url) – all under permissive licenses (MIT, Apache-2.0, Apache-2.0)
+CLIP_URL = "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/6b7c523703ae26e39be4b03774966f8571c7f523/"
+MODELS = {  # name: (file, MB, sha256, url) – all under permissive licenses (MIT, Apache-2.0, Apache-2.0, MIT)
     "faces": ("face_detection_yunet_2023mar.onnx", 0.3, "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
               "https://github.com/opencv/opencv_zoo/raw/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/"
               "face_detection_yunet/face_detection_yunet_2023mar.onnx"),
@@ -81,7 +72,16 @@ MODELS = {  # name: (file, MB, sha256, url) – all under permissive licenses (M
     "recognition": ("face_recognition_sface_2021dec.onnx", 37, "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
                     "https://github.com/opencv/opencv_zoo/raw/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/"
                     "face_recognition_sface/face_recognition_sface_2021dec.onnx"),
+    # CLIP ViT-B/32 for the content tags (content_tags.py): OpenAI's model (MIT) as quantized ONNX by Xenova
+    "tags_image": ("clip_vit_b32_image_q.onnx", 89, "583fd1110a514667812fee7d684952aaf82a99b959760c8d7dca7e0ab9839299",
+                   CLIP_URL + "onnx/vision_model_quantized.onnx"),
+    "tags_text": ("clip_vit_b32_text_q.onnx", 65, "73baab855d406190da9faa498cfedf65f15cf309f4cc7385b7b032e6d08e5c3a",
+                  CLIP_URL + "onnx/text_model_quantized.onnx"),
+    "tags_tokenizer": ("clip_vit_b32_tokenizer.json", 2.2, "f7f3b7af117d467b58374797691a6438d3e6b9e9cef800dfd5dced7f697a90cd",
+                       CLIP_URL + "tokenizer.json"),
 }
+PARTS = ("faces", "objects", "tags", "sound", "scenes")     # "transcripts" is cutter analyze's own (Whisper)
+LEGACY_PARTS = ("faces", "objects", "sound", "scenes")     # files from before "parts": all but the tags
 COCO = ("person,bicycle,car,motorcycle,airplane,bus,train,truck,boat,traffic light,fire hydrant,stop sign,parking meter,"
         "bench,bird,cat,dog,horse,sheep,cow,elephant,bear,zebra,giraffe,backpack,umbrella,handbag,tie,suitcase,frisbee,"
         "skis,snowboard,sports ball,kite,baseball bat,baseball glove,skateboard,surfboard,tennis racket,bottle,wine glass,"
@@ -107,19 +107,26 @@ def model_file(name, download=True):
     if not download or os.environ.get("CUTTER_TEST") or os.environ.get("HF_HUB_OFFLINE"):
         return None
     log(f"Downloading the {name} model ({mb:g} MB) …")
+    tmp = path.with_name(path.name + ".part")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         req = urllib.request.Request(url, headers={"User-Agent": "cutter"})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            data = r.read()
-        if hashlib.sha256(data).hexdigest() != sha:
+        h = hashlib.sha256()
+        with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+            while chunk := r.read(1 << 20):
+                h.update(chunk)
+                f.write(chunk)
+        if h.hexdigest() != sha:
             log(f"  ! {file}: the checksum does not match, not used")
+            tmp.unlink(missing_ok=True)
             return None
-        tmp = path.with_name(path.name + ".part")
-        tmp.write_bytes(data)
         os.replace(tmp, path)
     except OSError as e:
-        log(f"  ! {file} could not be downloaded ({e}); faces, people and objects are left out")
+        log(f"  ! {file} could not be downloaded ({e}); what needs it is left out")
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
         return None
     return path
 
@@ -365,40 +372,6 @@ def video_metrics(path, duration, keep_clip_frames, detector=None):
     return out, frames_for_clip, fps, samples, [v.tolist() for v in signature], found
 
 
-class ClipTagger:
-    def __init__(self, device, content_tags, shot_tags):
-        import torch
-        import open_clip
-        self.torch, self.device = torch, device
-        self.model, _, self.preprocess = open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai", device=device)
-        self.model.eval()
-        tok = open_clip.get_tokenizer("ViT-B-32")
-        with torch.no_grad():
-            def enc(prompts):
-                e = self.model.encode_text(tok([f"a photo of {p}" if not p.startswith("a ") else f"a photo: {p}" for p in prompts]).to(device))
-                return e / e.norm(dim=-1, keepdim=True)
-            self.c_names, self.s_names = list(content_tags), list(shot_tags)
-            self.c_emb, self.s_emb = enc(list(content_tags.values())), enc(list(shot_tags.values()))
-
-    def tag(self, frames, batch=32):
-        import numpy as np
-        from PIL import Image
-        torch = self.torch
-        secs, res = sorted(frames), {}
-        for i in range(0, len(secs), batch):
-            chunk = secs[i:i + batch]
-            x = torch.stack([self.preprocess(Image.fromarray(frames[s])) for s in chunk]).to(self.device)
-            with torch.no_grad():
-                im = self.model.encode_image(x)
-                im = im / im.norm(dim=-1, keepdim=True)
-                c = (100 * im @ self.c_emb.T).softmax(dim=-1).cpu().numpy()
-                sh = (100 * im @ self.s_emb.T).softmax(dim=-1).cpu().numpy()
-            for k, s in enumerate(chunk):
-                res[s] = {"tags": [[self.c_names[j], round(float(c[k, j]), 3)] for j in np.argsort(-c[k])[:3]],
-                          "shot_size": [[self.s_names[j], round(float(sh[k, j]), 3)] for j in np.argsort(-sh[k])[:2]]}
-        return res
-
-
 class AudioTagger:
     SR = 32000
 
@@ -638,6 +611,11 @@ def readable(clips, out, known=None):
             pic.append(f'horizon tilted {s["horizon_tilt"]:+g}°')
         if pic:
             lines.append("picture  " + " | ".join(pic))
+        if d.get("tags_key"):
+            from .content_tags import ranges as tag_ranges
+            found = sorted(tag_ranges(per, c["duration"]).items(), key=lambda kv: -quality.total(kv[1]))
+            if found:
+                lines.append("content  " + " | ".join(f"{name} {_spans(rs, limit=3)}" for name, rs in found[:6]))
         who = [f'{p["id"]}{" " + p["name"] if p["name"] else ""} {_spans(p["clips"][c["id"]], limit=4)}'
                for p in known or [] if p["clips"].get(c["id"])]
         if who:
@@ -667,11 +645,11 @@ def readable(clips, out, known=None):
     return "\n".join(lines)
 
 
-def run(clips_path, out, only=None, force=False, device="auto", scenes=True, clip_tags=None, audio_tags=None,
-        scene_threshold=27.0, content_tags=None, detect=True, sound=True, text_path=None, people_path=None,
-        recognize=True, proxies=None):
-    """Analyze every clip. clip_tags/audio_tags: None = use them if torch & co. are installed. proxies: {clip ID:
-    {"path", "width", "height"}} (proxies.table): the picture of these clips is read from the proxy."""
+def run(clips_path, out, only=None, force=False, device="auto", parts=PARTS, audio_tags=None,
+        scene_threshold=27.0, content_tags=None, text_path=None, people_path=None, recognize=True, proxies=None):
+    """Analyze every clip. parts: what runs besides the picture quality (PARTS); audio_tags: None = use them if
+    torch & co. are installed. proxies: {clip ID: {"path", "width", "height"}} (proxies.table): the picture of these
+    clips is read from the proxy."""
     try:
         import cv2
     except ImportError:
@@ -699,33 +677,39 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
         if available("torch"):
             import torch
             device = "cuda" if torch.cuda.is_available() else "cpu"
+    parts = set(parts or ())
+    unknown = parts - set(PARTS)
+    if unknown:
+        raise CutterError(f"Unknown analysis parts: {', '.join(sorted(unknown))} (known: {', '.join(PARTS)})", USAGE)
+    scenes, sound = "scenes" in parts, "sound" in parts
     if scenes and not available("scenedetect"):
         log("PySceneDetect is missing: no scene detection")
         scenes = False
-    use_clip = available("torch") and available("open_clip") if clip_tags is None else clip_tags
     use_audio = available("torch") and available("panns_inference") if audio_tags is None else audio_tags
-    clip_tagger = ClipTagger(device, content_tags or CONTENT_TAGS, SHOT_TAGS) if use_clip else None
     audio_tagger = AudioTagger(device) if use_audio else None
+    models = (model_file("faces") if "faces" in parts else None,
+              model_file("objects") if "objects" in parts and available("onnxruntime") else None,
+              model_file("recognition") if "faces" in parts and recognize and people_path else None)
+    # what a clip's file must have been made with: the parts asked for that can run here
+    made = ({"faces"} if models[0] else set()) | ({"objects"} if models[1] else set()) | (
+        {"sound"} if sound else set()) | ({"scenes"} if scenes else set())
     index_path = out / "_index.json"
     index = read_json(index_path) if index_path.exists() else {}
 
     def current(dst):
         try:
-            return dst.exists() and read_json(dst).get("version", 1) >= VERSION
+            d = read_json(dst) if dst.exists() else None
         except (ValueError, OSError):
             return False
+        return bool(d) and d.get("version", 1) >= VERSION and made <= set(d.get("parts", LEGACY_PARTS))
     pending = [c for c in clips if c.get("has_video", True) and (force or not current(out / f'{c["id"]}.json'))]
     # Clips are independent, and OpenCV, onnxruntime and ffmpeg release the interpreter lock: several at a time,
     # each with two threads of its own (left to themselves they all take every core and get in each other's way).
-    workers = 1 if (clip_tagger or audio_tagger) else max(1, min(8, (os.cpu_count() or 2) // 2, len(pending)))
+    workers = 1 if audio_tagger else max(1, min(8, (os.cpu_count() or 2) // 2, len(pending)))
     if workers > 1:
         import cv2
         cv2.setNumThreads(2)
         os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "threads;2")
-    models = (None, None, None)
-    if pending and detect:
-        models = (model_file("faces"), model_file("objects") if available("onnxruntime") else None,
-                  model_file("recognition") if recognize and people_path else None)
     if pending:
         log(f"\nImage and sound analysis of {len(pending)} clips "
             f"({sum(c['duration'] for c in pending) / 60:.0f} min of footage) …")
@@ -745,14 +729,14 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
         t0 = time.time()
         path = pathlib.Path(c["path"])
         res = {"id": c["id"], "version": VERSION, "file": c.get("rel_path"), "duration": c["duration"], "fps": c.get("fps"),
-               "resolution": f'{c.get("width")}x{c.get("height")}', "units": UNITS}
+               "resolution": f'{c.get("width")}x{c.get("height")}', "units": UNITS, "parts": sorted(made)}
         picture = path
         if c["id"] in (proxies or {}):                 # the same frames, much faster to decode; sound and track
             x = proxies[c["id"]]                       # are read from the footage
             picture, res["picture_from"] = pathlib.Path(x["path"]), f'proxy {x["width"]}x{x["height"]}'
         try:
             res["scenes"] = detect_scenes(picture, scene_threshold) if scenes else []
-            per_sec, frames, _, samples, signature, found = video_metrics(picture, c["duration"], clip_tagger is not None, detector())
+            per_sec, frames, _, samples, signature, found = video_metrics(picture, c["duration"], False, detector())
         except Exception as e:
             return c, None, str(e), 0
         if models[0] and models[2]:
@@ -766,10 +750,6 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
                 cv2.imwrite(str(out / g["thumb"]), found[g.pop("best")]["crop"])
         values, res["camera"] = quality.camera(samples, c["duration"])
         res["usable"], res["flaws"] = quality.usable(samples, values, c["duration"])
-        if clip_tagger and frames:
-            tags = clip_tagger.tag(frames)
-            for p in per_sec:
-                p.update(tags.get(p["t"], {}))
         audio_events = []
         if audio_tagger and c.get("has_audio"):
             a_sec, audio_events = audio_tagger.events(path, c["duration"])
@@ -806,12 +786,17 @@ def run(clips_path, out, only=None, force=False, device="auto", scenes=True, cli
             dump_json(index_path, index, ensure_ascii=False, indent=1)
             done += 1
             log(f'  [{n}/{len(pending)}] {c["id"]} {c["duration"]:.0f} s in {took:.0f} s, usable {res["summary"]["usable_s"]:g} s')
+    tagged = None
+    if "tags" in parts:
+        from . import content_tags as ct
+        tagged = ct.run(clips, out, content_tags=content_tags, proxies=proxies, force=force)
     flag_low_detail(all_clips, out)
     takes = find_takes(all_clips, out)
     known = people.update(all_clips, out, people_path)["people"] if people_path else []
     if text_path:
         pathlib.Path(text_path).write_text(readable(all_clips, out, known), encoding="utf-8")
-    return {"output": str(out), "analyzed": done, "clip_tags": bool(clip_tagger), "audio_tags": bool(audio_tagger),
+    return {"output": str(out), "analyzed": done, "parts": sorted(made | ({"tags"} if tagged and tagged["available"] else set())),
+            "tagged": tagged["tagged"] if tagged else 0, "audio_tags": bool(audio_tagger),
             "faces": bool(models[0]), "objects": bool(models[1]),
             "people": [{k: p[k] for k in ("id", "name", "seconds")} for p in known], "workers": workers if pending else 0,
             "takes": takes, "text": str(text_path) if text_path else None}

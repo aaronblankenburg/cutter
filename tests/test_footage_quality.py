@@ -13,6 +13,7 @@ import unittest
 from helpers import FFMPEG, TempDir, have_modules
 
 from cutter import quality, telemetry
+from cutter.util import CutterError
 
 NUMPY = have_modules("numpy")
 OPENCV = NUMPY and have_modules("cv2") and FFMPEG
@@ -502,6 +503,63 @@ class WholeAnalysis(unittest.TestCase):
         old = dict(self.data, version=2)
         (self.d / "image" / "C001.json").write_text(json.dumps(old))
         self.assertEqual(image_analysis.run(self.d / "clips.json", self.d / "image")["analyzed"], 1)   # an old file is redone
+
+    def test_parts_asked_for_later_are_added(self):
+        from cutter import image_analysis
+        self.assertEqual(self.data["parts"], ["scenes", "sound"])        # no face or object model in tests
+        f = self.d / "image" / "C001.json"
+        saved = f.read_text()
+        try:
+            f.write_text(json.dumps(dict(self.data, parts=["scenes"])))
+            self.assertEqual(image_analysis.run(self.d / "clips.json", self.d / "image",
+                                                parts={"scenes"})["analyzed"], 0)
+            self.assertEqual(image_analysis.run(self.d / "clips.json", self.d / "image")["analyzed"], 1)  # + sound
+            with self.assertRaises(CutterError):
+                image_analysis.run(self.d / "clips.json", self.d / "image", parts={"smell"})
+        finally:
+            f.write_text(saved)
+
+    def test_content_tags_pass(self):
+        """The CLIP pass with a stand-in model: one frame per second, tags into the clip's file, summary and
+        quality.txt; a second pass does nothing, another tag list tags again."""
+        from unittest import mock
+        import numpy as np
+        from cutter import content_tags as ct, image_analysis
+        pics = ct.frames(self.d / "2024-05-01 09-00-00 pan.mp4", 13.0)
+        self.assertEqual(pics.shape, (13, 224, 224, 3))
+        self.assertEqual(pics.dtype, np.uint8)
+
+        class Fake:
+            def __init__(self, files, content_tags=None):
+                self.names = list(content_tags or ct.CONTENT_TAGS)
+
+            def tag(self, frames):
+                return [{"tags": [["desert" if i < 8 else "road", 0.8], ["sky", 0.1]], "shot_size": [["wide", 0.6]]}
+                        for i in range(len(frames))]
+        f = self.d / "image" / "C001.json"
+        saved = f.read_text()
+        clips = json.loads((self.d / "clips.json").read_text())
+        try:
+            with mock.patch.object(ct, "Tagger", Fake), mock.patch.object(ct, "model_files", lambda: {"x": 1}):
+                r = ct.run(clips, self.d / "image")
+                self.assertEqual(r, {"tagged": 1, "skipped": 0, "available": True})
+                d = json.loads(f.read_text())
+                self.assertEqual(d["per_second"][0]["tags"][0], ["desert", 0.8])
+                self.assertEqual(d["summary"]["tags"], ["desert", "road"])
+                self.assertEqual(d["tags_key"], ct.key())
+                rs = ct.ranges(d["per_second"], 13.0)
+                self.assertEqual(rs["desert"], [{"start": 0, "end": 8}])
+                self.assertEqual(rs["road"], [{"start": 8, "end": 13.0}])
+                self.assertEqual(ct.run(clips, self.d / "image")["tagged"], 0)
+                self.assertEqual(ct.run(clips, self.d / "image", content_tags={"camel": "a camel"})["tagged"], 1)
+                text = image_analysis.readable(clips, self.d / "image")
+                self.assertIn("content  desert 0:00.0-0:08.0 | road 0:08.0-0:13.0", text)
+            self.assertNotEqual(ct.key({"camel": "a camel"}), ct.key())
+            self.assertEqual(ct.prompt("a dune"), "a photo of a dune")
+            with mock.patch.object(ct, "model_files", lambda: None):
+                self.assertFalse(ct.run(clips, self.d / "image", force=True)["available"])
+        finally:
+            f.write_text(saved)
 
 
 if __name__ == "__main__":

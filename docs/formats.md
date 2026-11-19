@@ -67,8 +67,14 @@ phase = 2                       # which beat (0-3) is the first downbeat, overri
 entry = "first_downbeat"        # or { kind = "downbeat_before_picture", max_s = 0.9 }
 beats_from = "M1"               # use another cue's beats (a second excerpt of the same track)
 
+[analysis]
+parts = ["transcripts", "faces", "objects", "tags", "sound", "scenes"]   # what cutter analyze runs (default: all;
+                                # sharpness, exposure, camera moves and usable ranges always); --parts overrides
+
 [image_analysis]
 recognize_faces = false         # do not work out who is who (default: true; see people.json)
+content_tags = {desert = "sand dunes in the desert", camel = "a camel"}   # what CLIP looks for (default: about 30
+                                # neutral descriptions, content_tags.py); English, a short noun phrase each
 
 [color]
 auto = true                     # a colour correction per shot, suggested from the footage (default: true; see Colour)
@@ -171,9 +177,12 @@ the clip, people and objects, sound, place, other takes). The numbers behind it 
  "per_second": [{"t": 0, "sharpness": 212.4, "exposure": {"mean": 118.0, "too_dark": 0.0, "clipped": 0.02},
                  "color": {"warmth": 0.06, "saturation": 0.31}, "pan": 0.3, "pan_x": -0.2, "pan_y": 0.1, "zoom": 0.0,
                  "shake": 0.2, "motion": 1.1, "faces": 1, "face": 0.22, "people": 2, "person": 0.8,
-                 "objects": {"car": 1}, "shot": "medium close-up", "level": -24.0, "wind": 0.0}, …],
+                 "objects": {"car": 1}, "shot": "medium close-up", "level": -24.0, "wind": 0.0,
+                 "tags": [["desert", 0.71], ["road", 0.12], ["sky", 0.05]], "shot_size": [["wide", 0.4], …]}, …],
+ "parts": ["faces", "objects", "scenes", "sound"], "tags_key": "3f1c0a9e27b4",
  "summary": {"usable_s": 25.2, "steady_s": 19.0, "camera": {"static": 22.0, "pan_right": 3.8}, "people_max": 2,
-             "shots": ["medium close-up"], "objects": ["car"], "speech_s": 7.6, "similar": ["C002"], …}}
+             "shots": ["medium close-up"], "objects": ["car"], "tags": ["desert", "road"], "speech_s": 7.6,
+             "similar": ["C002"], …}}
 ```
 
 - **Times** are seconds of the clip. **Speeds** are % of the picture width per second; `units` in the file explains
@@ -196,6 +205,13 @@ the clip, people and objects, sound, place, other takes). The numbers behind it 
 - **`faces`** are the people of the clip, told apart by their faces: the seconds each is seen in, a picture
   (`analysis/image/faces/`) and the vector that describes the face. Who they are across clips is in `people.json`
   (below).
+- **`tags`** say what is in the picture: CLIP ViT-B/32 (content_tags.py) compares one frame a second with a list of
+  short descriptions (`[image_analysis] content_tags`) and gives the three most likely with their share; a tag
+  counts from 0.3 on. `shot_size` does the same with shot types (close-up, wide, selfie, low angle …), less
+  reliable than `shot`. quality.txt lists the tags as time ranges (`content  desert 0:00-0:12 | …`). `tags_key`
+  names the model and lists they were made with: another list tags the clips again.
+- **`parts`** are the parts of the analysis the file was made with (`[analysis] parts`); asking for one later
+  measures the clip again (the tags alone are only added).
 - **`similar`** names clips recorded within half an hour that look alike: probably other takes of the same shot.
 - `horizon_tilt` (degrees) appears only when one long, nearly level line stays put through the clip.
 
@@ -380,11 +396,15 @@ skill): favourites to use where they fit, rejects to leave out.
 {"version": 1, "selects": [
   {"id": "s1", "clip": "C005", "file": "2012-07-14 09-26-28 DSC_0669.MOV", "kind": "favorite",
    "in": 3.2, "out": 8.0, "note": "the sunrise", "created": "2026-11-19T08:12:00+01:00"},
-  {"id": "s2", "clip": "C017", "file": "GOPR0175.MP4", "kind": "reject", "in": null, "out": null, "note": ""}]}
+  {"id": "s2", "clip": "C017", "file": "GOPR0175.MP4", "kind": "reject", "in": null, "out": null, "note": ""},
+  {"id": "s3", "clip": "C023", "file": "GOPR0180.MP4", "kind": "tag", "tag": "border crossing",
+   "in": 12.0, "out": 30.5, "note": ""}]}
 ```
 
-`clip`: ID in clips.json (`file` for people reading it); `kind`: `favorite` or `reject`; `in`/`out`: seconds in the
-clip, both null for the whole clip; `note`: free text (the user's language).
+`clip`: ID in clips.json (`file` for people reading it); `kind`: `favorite`, `reject` or `tag`; `in`/`out`: seconds
+in the clip, both null for the whole clip; `note`: free text (the user's language). A `tag` is the user's own label
+for what is in the clip or range (`tag`, in the user's language, up to 40 characters): the briefing or feedback may
+refer to it ("the border crossing scenes").
 
 ## plan.py
 

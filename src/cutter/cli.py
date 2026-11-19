@@ -66,9 +66,22 @@ def c_doctor(a, out):
         raise SystemExit(FINDING)
 
 
+def analysis_parts(p, given=None):
+    """The parts of the analysis to run: --parts, else cutter.toml [analysis] parts (all by default)."""
+    from .image_analysis import PARTS
+    known = ("transcripts", *PARTS)
+    raw = given if given is not None else p["analysis"].get("parts", known)
+    parts = {x.strip() for x in (raw.split(",") if isinstance(raw, str) else raw or []) if str(x).strip()}
+    bad = parts - set(known)
+    if bad:
+        raise CutterError(f"Unknown analysis parts: {', '.join(sorted(bad))} (known: {', '.join(known)})", USAGE)
+    return parts
+
+
 def c_analyze(a, out):
     p = _project(a)
     from . import analyze
+    parts = analysis_parts(p, a.parts)
     media = a.media or [str(pathlib.Path(os.path.expanduser(m))) for m in p.media_roots().values()]
     if not media:
         raise CutterError("No footage given (cutter.toml → [media] or --media)", MISSING)
@@ -80,7 +93,7 @@ def c_analyze(a, out):
                     f"  footage: {', '.join(media)}\n  output:  {target} (clips.json, transcripts/, sheets/, strips/, quality.txt)"
                     + (f"\n  proxies: {p.path('proxies')} ({p['proxies']['height']}p, for the clips that need one)" if with_proxies else ""))
     r = analyze.run_analysis(media, target, list_only=a.list, since=a.since, until=a.until, exclude=a.exclude, only=a.only,
-                             force=a.force, no_transcripts=a.no_transcripts, no_sheets=a.no_sheets, model=a.model,
+                             force=a.force, no_transcripts=a.no_transcripts or "transcripts" not in parts, no_sheets=a.no_sheets, model=a.model,
                              language=a.language or p.get("language") or "auto", device=a.device, threads=a.threads, max_frames=a.max_frames,
                              interval=a.interval, roots=p.media_roots(), standins=standins)
     made = table = None
@@ -95,7 +108,7 @@ def c_analyze(a, out):
         from . import image_analysis
         try:
             r["image"] = image_analysis.run(target / "clips.json", p.path("image_analysis"), only=a.only, force=a.force,
-                                            proxies=table,
+                                            proxies=table, parts=parts - {"transcripts"},
                                             device=a.device, text_path=target / "quality.txt",
                                             people_path=target / "people.json",
                                             recognize=(p.get("image_analysis") or {}).get("recognize_faces", True),
@@ -619,6 +632,8 @@ def parser():
     p.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     p.add_argument("--threads", type=int, default=max(4, (os.cpu_count() or 8) // 2))
     p.add_argument("--max-frames", type=int, default=24); p.add_argument("--interval", type=float)
+    p.add_argument("--parts", help="what to analyse, comma-separated: transcripts, faces, objects, tags, sound, scenes "
+                                   "(default: cutter.toml → [analysis] parts, else all)")
 
     p = cmd("music", c_music, "music: beats, bars and loudness (analyze); license check (license)")
     ms = p.add_subparsers(dest="music_cmd", required=True)

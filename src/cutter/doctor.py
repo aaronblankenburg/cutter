@@ -77,7 +77,7 @@ def check(project=None, filmcraft_port=None, model="large-v3-turbo", host_facts=
     from .image_analysis import MODELS, model_file
     absent = [name for name in MODELS if model_file(name, download=False) is None]
     checks.append(_item("Detection models (faces, who is who, objects)", not absent, "present" if not absent else "missing: " + ", ".join(absent),
-                        "downloaded on the first 'cutter analyze' into the volume cutter-models (57 MB)", required=False,
+                        "downloaded on the first 'cutter analyze' into the volume cutter-models (57 MB, and 155 MB for the content tags)", required=False,
                         download_mb=sum(round(MODELS[name][1]) for name in absent) or None))
     for label, stems in FONTS.items():
         checks.append(_item(f"Font {label}", font_present(stems), stems[0], "part of the Docker image (fonts-noto-core, fonts-urw-base35, fonts-liberation)",

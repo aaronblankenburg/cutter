@@ -60,7 +60,7 @@ out of an ID that shows two people, `cutter people list` shows them). This runs 
 computer only. Every contact sheet gets a timeline of this below its
 pictures: green is usable, red flawed, blue speech, orange wind. `retime` uses the measurements to avoid flawed
 frames at cut points. Several clips are measured at a time; 27 minutes of 720p footage took 8 minutes on a 16-core computer. `--no-image` skips it.
-The three models for this (57 MB, MIT and Apache-2.0) are downloaded once. `--language` (or `language` in cutter.toml) fixes the spoken language; otherwise
+The three models for this (57 MB, MIT and Apache-2.0) are downloaded once. A pass of its own tags what is in the picture (desert, road, campfire, aerial …) with CLIP (155 MB, MIT; about ten times faster than real time on 360p). `--parts` (or `[analysis] parts`) chooses what runs: transcripts, faces, objects, tags, sound, scenes. `--language` (or `language` in cutter.toml) fixes the spoken language; otherwise
 Whisper detects it per clip.
 
 Transcription runs on the CPU with int8 (see the README for timings). The model is downloaded once (about 1.6 GB)

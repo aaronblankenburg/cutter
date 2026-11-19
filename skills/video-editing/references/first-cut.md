@@ -57,7 +57,12 @@ Then look for yourself:
 - **The user's own selection:** if the project folder has `selects.json` (format:
   [docs/formats.md](../../../docs/formats.md#selectsjson)), the user viewed the footage and marked favourites and
   rejects (whole clips or ranges, maybe with a note). Use the favourites where they fit the story; leave the rejects
-  out. Where you do not follow the selection, say why in decisions.json.
+  out. Where you do not follow the selection, say why in decisions.json. Entries of `"kind": "tag"` are the user's
+  own labels for clips or ranges ("border crossing", "Anna's birthday"): when the briefing or a comment names one,
+  it means those clips. They are not wishes by themselves.
+- **What is in the picture:** quality.txt has a `content` line per clip (CLIP tags as time ranges: desert, road,
+  campfire, aerial …) beside people and objects. Use it to find shots for a topic; check the contact sheet before
+  relying on it, the tags are guesses.
 
 ## Formats: Reels, Shorts, feed posts
 
