@@ -25,7 +25,7 @@ import shutil
 from fractions import Fraction
 from urllib.parse import unquote, urlsplit
 
-from . import color, filmcraft, paths, timeline, titles
+from . import color, filmcraft, paths, reframe, timeline, titles
 from .legacy import otio_meta_in
 from .util import CutterError, MISSING, read_json
 
@@ -67,7 +67,7 @@ def timecode_frames(tc, timebase, drop):
 def timeline_args(p):
     return dict(ns=p.otio_namespace, music_dirs=p.music_dirs(), config_external=p["timeline"]["external_clips"],
                 track_names=p["timeline"]["track_names"], texts=p["timeline"]["texts"], media_roots=p.media_roots(),
-                project_dir=p.folder)
+                project_dir=p.folder, frame=p["timeline"].get("frame"))
 
 
 def package_url(targ, path):
@@ -88,13 +88,15 @@ def build_model(p, cut, target, relink=None):
     if not edit_p.exists():
         raise CutterError(f"Edit list not found: {edit_p}", MISSING)
     targ = paths.check_target(target)
-    t = timeline.make(edit_p, p.path("clips"), p.media_base, originals=True, **timeline_args(p))
+    fr, placed = reframe.of_cut(p, cut, read_json(edit_p), log=None)
+    t = timeline.make(edit_p, p.path("clips"), p.media_base, originals=True, reframe=placed, **timeline_args(p))
     tl, clips, edit, ns = t["timeline"], t["clips"], t["edit"], t["ns"]
     fps, timebase, ntsc = rate(edit.get("fps", 25))
     frames = lambda sec: round(sec * fps)
     fc = filmcraft.load_config(p.path_of(p["filmcraft"]["config"]) if p["filmcraft"].get("config") else None)
+    fc, edit = titles.for_frame(fc, edit, fr)
     model = {"name": edit.get("title") or f'{p.get("title") or "cutter"} ({cut})', "fps": fps, "timebase": timebase,
-             "ntsc": ntsc, "width": timeline.FRAME_W, "height": timeline.FRAME_H, "video": [], "audio": [],
+             "ntsc": ntsc, "width": fr.w, "height": fr.h, "frame": fr.name, "video": [], "audio": [],
              "markers": [], "files": {}, "package": {}, "subtitles": t["subtitles"], "notes": []}
     shots = {s["nr"]: s for sec in edit["sections"] for s in sec["shots"]}
 
@@ -159,7 +161,7 @@ def build_model(p, cut, target, relink=None):
                     f = package_file(local, "music", "audio", seconds=timeline.probe_duration(local) or dur)
                     item["cue"] = tokens[0] if tokens else None
                 else:
-                    wh = timeline.probe_size(local) or (timeline.FRAME_W, timeline.FRAME_H)
+                    wh = timeline.probe_size(local) or (fr.w, fr.h)
                     f = package_file(local, "maps", "still", *wh, seconds=dur)
                 item["file"] = f["id"]
             items.append(item)
@@ -179,8 +181,8 @@ def build_model(p, cut, target, relink=None):
         out_titles.append((key, layers, band))
         model["files"][key] = {"id": key, "name": pathlib.Path(key).name, "url": paths.url(targ, key, under_package=True),
                                "native": paths.join(targ, key, under_package=True), "timebase": timebase, "ntsc": ntsc,
-                               "duration": frames(end - start), "timecode": None, "width": titles.W,
-                               "height": titles.H, "has_video": True, "has_audio": False, "kind": "still"}
+                               "duration": frames(end - start), "timecode": None, "width": fr.w,
+                               "height": fr.h, "has_video": True, "has_audio": False, "kind": "still"}
         a, b = frames(start), frames(end)
         picture_items.append({"name": pathlib.Path(key).stem, "file": key, "start": a, "end": b, "in": 0, "out": b - a,
                               "scale": 100, "level_db": None, "volume": [],
@@ -204,7 +206,7 @@ def build_model(p, cut, target, relink=None):
         for card in et["cards"]:
             t0 = sec(v1_items[tag_nr[card["tag"]]]["start"])
             a_, b_ = t0 + card["from"], t0 + card["to"]
-            layers, band = titles.end_card_layers(card, style, ec.get("shadow"))
+            layers, band = titles.end_card_layers(card, style, ec.get("shadow"), fr)
             picture(layers, a_, b_, [(a_, 0), (a_ + ramp, 100), (b_ - ramp, 100), (b_ - 0.04, 0)], band)
             spans.append((a_, b_))
         dip = (spans[0][0], spans[-1][1], et.get("music_dip_db", -4.0))
@@ -273,6 +275,17 @@ def build_model(p, cut, target, relink=None):
                                      "(suggested correction, in FilmCraft's Color Grading units)",
                                      "start": it["start"], "duration": it["end"] - it["start"], "color": "pink",
                                      "kind": "color"})
+    # reframing: the exchange formats keep the footage centred; where FilmCraft and the review move it, a marker
+    for nr, rp in sorted(placed["shots"].items()):
+        it = v1_items.get(int(nr))
+        if not it:
+            continue
+        parts = [f"shot: {reframe.describe(rp)}"] if rp.get("offset") != [0.0, 0.0] else []
+        parts += [f"cutaway {k + 1}: {reframe.describe(c)}" for k, c in enumerate(rp.get("cutaways") or []) if c]
+        if parts:
+            model["markers"].append({"name": f"Reframe shot {nr}", "comment": f"{fr.name}: " + "; ".join(parts),
+                                     "start": it["start"], "duration": it["end"] - it["start"], "color": "cyan",
+                                     "kind": "reframe"})
     dec_p = p.path("decisions", cut)
     if dec_p.exists():
         for e in read_json(dec_p).get("entries", []):
@@ -317,7 +330,7 @@ def export_package(p, cut, target, out, to="premiere", relink=None):
             model["notes"].append(f"missing file: {src}")
     if to != "filmcraft":                                 # FilmCraft makes its titles itself
         for key, layers, band in model["titles"]:
-            titles.render(layers, out / key, band)
+            titles.render(layers, out / key, band, (model["width"], model["height"]))
             written.append(key)
     xml = out / f"{stem}{TIMELINE_SUFFIX[to]}"
     if to == "premiere":
@@ -364,7 +377,10 @@ def filmcraft_project(p, cut, target, out_file, relink=None):
         shutil.rmtree(work)
     work.mkdir(parents=True)
     try:
-        t = timeline.make(edit_p, p.path("clips"), p.media_base, originals=True, url_of=url_of, **timeline_args(p))
+        edit = read_json(edit_p)
+        fr, placed = reframe.of_cut(p, cut, edit, log=None)
+        t = timeline.make(edit_p, p.path("clips"), p.media_base, originals=True, url_of=url_of, reframe=placed,
+                          **timeline_args(p))
         timeline.write(t, work / "timeline")
         out_file = pathlib.Path(out_file)
         if out_file.exists():
@@ -372,11 +388,10 @@ def filmcraft_project(p, cut, target, out_file, relink=None):
         client = filmcraft.CliClient(filmcraft.find_cli(), target=out_file, data_dir=work / "filmcraft-data")
         music_analysis = read_json(p.path("music_analysis")) if p.path("music_analysis").exists() else None
         srt = work / "timeline.srt"
-        edit = read_json(edit_p)
         r = filmcraft.finish(client, filmcraft.project_config(p), edit, work / "timeline.fcp7.xml",
                              srt if srt.exists() else None, work / "filmcraft_batch.jsonl", base=p.media_base,
                              music_analysis=music_analysis, retime_cues=p["retime"].get("cues"),
-                             color_plan=color.for_cut(p, cut, edit, log=None))
+                             color_plan=color.for_cut(p, cut, edit, log=None), frame=fr, reframe=placed)
         notes = [x for x in r.get("log", []) if "error" in str(x).lower()]
         stray = [m for m in filmcraft_media(out_file) if not _on_target(m, targ)]
         if stray:

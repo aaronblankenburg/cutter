@@ -175,7 +175,8 @@ def c_retime(a, out):
 def _timeline_args(p):
     t = p["timeline"]
     return dict(ns=p.otio_namespace, music_dirs=p.music_dirs(), config_external=t["external_clips"],
-                track_names=t["track_names"], texts=t["texts"], media_roots=p.media_roots(), project_dir=p.folder)
+                track_names=t["track_names"], texts=t["texts"], media_roots=p.media_roots(), project_dir=p.folder,
+                frame=t.get("frame"))
 
 
 def c_timeline(a, out):
@@ -202,8 +203,12 @@ def c_timeline(a, out):
     if not a.build_only:
         r = timeline.assemble(edit_p, p.path("clips"), p.media_base, p.path("work", cut) / "intermediate", edit_p,
                               audio=p["audio"], external_ids=p.external_clip_ids(), **_timeline_args(p))
-    b = timeline.build(edit_p, p.path("clips"), p.media_base, target, proxies=table, **_timeline_args(p))
+    from . import reframe
+    fr, placed = reframe.of_cut(p, cut, read_json(edit_p), log=out.info)
+    b = timeline.build(edit_p, p.path("clips"), p.media_base, target, proxies=table, reframe=placed, **_timeline_args(p))
+    write_json(p.path("work", cut) / "reframe_plan.json", placed)
     r["timeline"], r["media"] = b, b["media"]
+    r["frame"], r["reframed"] = fr.to_json(), len(placed["shots"])
     text = (f"Camera audio: {r['lowered']} lowered under music, {r['measured']} brought to the target loudness\n" if not a.build_only else "") + b["text"]
     out.result(r, text)
 
@@ -285,13 +290,14 @@ def c_filmcraft(a, out):
                 raise CutterError(f"The project file exists already: {project_file}", MISSING, "--overwrite rebuilds it from the timeline")
             project_file.unlink()
         cl = client(base, project_file)
-        from . import color
+        from . import color, reframe
         edit = read_json(edit_p)
         plan = color.for_cut(p, cut, edit, log=out.info)
+        fr, placed = reframe.of_cut(p, cut, edit, log=out.info)
         r = filmcraft.finish(cl, fc, edit, xml, srt, p.path("work", cut) / "filmcraft_batch.jsonl", base=p.media_base,
                              backup=(p.path("work", cut) / "backup_before_build.fcproj") if bridge is not None else None,
                              music_analysis=music_analysis, retime_cues=p["retime"].get("cues"), execute=not a.dry_run,
-                             color_plan=plan)
+                             color_plan=plan, frame=fr, reframe=placed)
         r["mode"] = "dry-run" if a.dry_run else ("bridge" if bridge is not None else "headless")
         r["media"] = _timeline_media(p, cut)
         if r["media"] == "proxies":
@@ -306,7 +312,10 @@ def c_filmcraft(a, out):
         target = pathlib.Path(a.output) if a.output else p.path("exports") / f"{cut}.mp4"
         preset = a.preset or fc["export"].get("preset") or p["filmcraft"].get("export_preset")
         settings = dict(fc["export"].get("settings") or {}, burnCaptions=True)       # subtitles are always burned in
-        extra = export_scale(p["filmcraft"].get("export_height"))
+        from . import frame as frame_mod
+        edit_p = p.path("edit", cut)
+        fr = frame_mod.of(read_json(edit_p) if edit_p.exists() else {}, p["timeline"].get("frame"))
+        extra = export_scale(p["filmcraft"].get("export_height"), fr)
         if a.dry_run:
             cmd = ["filmcraft-cli", "--project", str(project_file), "export", str(target), "--preset", preset, "--settings",
                    json.dumps(settings)] + (["--start", str(a.start), "--end", str(a.end)] if a.start is not None else []) + extra
@@ -340,15 +349,17 @@ def c_map(a, out):
     out.result(r, r["text"])
 
 
-def export_scale(height):
-    """filmcraft-cli arguments for [filmcraft] export_height: the sequence is 1080 lines, so 360 is --scale 0.3333."""
+def export_scale(height, fr=None):
+    """filmcraft-cli arguments for [filmcraft] export_height, the lines of the shorter side: in a 1920x1080 sequence
+    360 is --scale 0.3333, in 1080x1920 too (360x640)."""
     try:
         h = int(height or 0)
     except (TypeError, ValueError):
         raise CutterError(f"[filmcraft] export_height: whole number of lines expected, not {height!r}", USAGE)
-    if h <= 0 or h >= 1080:
+    short = min(fr.w, fr.h) if fr else 1080
+    if h <= 0 or h >= short:
         return []
-    return ["--scale", f"{h / 1080:.6g}"]
+    return ["--scale", f"{h / short:.6g}"]
 
 
 def _clip_paths(p):

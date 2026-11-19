@@ -136,10 +136,20 @@
         frame.style.width = '';
         const over = root.scrollHeight - window.innerHeight;
         const h = frame.getBoundingClientRect().height;
-        if (over > 0 && h > 0) frame.style.width = `min(100%, ${Math.max(180, h - over - 3) * 16 / 9}px)`;
+        if (over > 0 && h > 0) frame.style.width = `min(100%, ${Math.max(180, h - over - 3) * aspect()}px)`;
       } else frame.style.width = '';
       tellHeight();
     });
+  }
+  // the cut's picture format (timeline.json "frame", else the video's size; 16:9 when neither is known)
+  function aspect() {
+    const tl = S.tl || {}, f = tl.frame || tl.video || {};
+    return f.width && f.height ? f.width / f.height : 16 / 9;
+  }
+  function setAspect() {
+    const frame = $('.video-frame'), a = aspect();
+    frame.style.setProperty('--ar', String(a));
+    frame.classList.toggle('tall', a < 1);
   }
   function tellHeight() {
     if (!EMBEDDED || window.parent === window) return;
@@ -317,6 +327,7 @@
     $('#film-title').textContent = tl.title || t('app_title');
     document.title = t('page_title', { cut: id, title: shortTitle(tl.title) });
     const hint = $('#loading-hint'); hint.hidden = false; hint.textContent = t('loading');
+    setAspect();
     if (tl.poster) video.poster = `media/${encodeURIComponent(id)}/${tl.poster}`;
     video.src = `media/${encodeURIComponent(id)}/${(tl.video && tl.video.file) || 'review.mp4'}`;
     if (tl.thumbnails && tl.thumbnails.vtt) {

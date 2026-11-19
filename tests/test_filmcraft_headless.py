@@ -101,6 +101,34 @@ class FilmCraftHeadless(unittest.TestCase):
                 self.assertGreater(float(cmp.stderr.rsplit("All:", 1)[1].split()[0]), 0.97)
 
 
+    def test_a_reel_in_9_16(self):
+        """edit.json "frame": "9:16": FilmCraft's sequence is 1080x1920 and renders it; a shot's own focus becomes
+        its position."""
+        d = self.film.parent
+        film = d / "reel_film"
+        shutil.copytree(self.film, film, ignore=shutil.ignore_patterns("*.fcproj", "frame_*.png", "*.png"))
+        edit_p = film / "cuts" / "cut1" / "edit.json"
+        edit = json.loads(edit_p.read_text(encoding="utf-8"))
+        edit["frame"] = "9:16"
+        first = next(s for sec in edit["sections"] for s in sec["shots"] if s.get("clip") != "TXT")
+        first["focus"] = 0.2
+        edit_p.write_text(json.dumps(edit), encoding="utf-8")
+        golden_demo.cli("timeline", "cut1", "--project", film, "--build-only")
+        r = golden_demo.cli("filmcraft", "build", "cut1", "--project", film)
+        self.assertRegex("\n".join(r["log"]), r"Batch: \d+ commands, \d+ ok, 0 failed")
+        project = film / "cuts" / "cut1" / "cut1.fcproj"
+        seq = json.loads(subprocess.run([CLI, "--compact", "--project", str(project), "inspect", "sequence"],
+                                        capture_output=True, text=True).stdout)
+        self.assertEqual((seq["settings"]["width"], seq["settings"]["height"]), (1080, 1920))
+        v1 = {int(it["name"].split()[0]): it for it in seq["video"][0]["items"] if it["name"].split()[0].isdigit()}
+        motion = next(e for e in v1[first["nr"]]["effects"] if e["effect"] == "motion")
+        self.assertIn("position", motion["params"])
+        out = film / "reel.png"
+        res = subprocess.run([CLI, "--compact", "--project", str(project), "render", "--seconds", "2", "--out", str(out)],
+                             capture_output=True, text=True,
+                             env={k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY")})
+        self.assertIn("1080x1920", res.stdout + res.stderr)
+
 @unittest.skipUnless(CLI and os.access(CLI, os.X_OK), "filmcraft-cli not available (set FILMCRAFT_CLI)")
 @unittest.skipUnless(TOOLS and FFMPEG, "needs numpy, OpenTimelineIO and ffmpeg")
 class FilmCraftDraft(unittest.TestCase):

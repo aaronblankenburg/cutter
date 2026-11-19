@@ -101,10 +101,11 @@ select, input[type="text"], textarea {
   background: #000;
   border-radius: var(--radius);
   overflow: hidden;
-  aspect-ratio: 16 / 9;
-  width: min(100%, calc(64vh * 16 / 9));
+  aspect-ratio: var(--ar, 1.7778);          /* the cut's frame (app.js setAspect): 16:9, 9:16, 4:5 … */
+  width: min(100%, calc(64vh * var(--ar, 1.7778)));
   margin: 0 auto;
 }
+.video-frame.tall { width: min(100%, calc(74vh * var(--ar, 1.7778))); }
 .video-frame video { width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }
 .video-frame:fullscreen { width: 100%; border-radius: 0; aspect-ratio: auto; }
 .tap-area { position: absolute; inset: 0; touch-action: manipulation; cursor: pointer; }
@@ -389,6 +390,7 @@ body.embedded .layout { max-width: none; }
   .cut-choice { flex: 1; min-width: 0; font-size: 0; }
   .cut-choice select { width: 100%; min-width: 0; font-size: 14px; }
   .video-frame { width: 100%; border-radius: 8px; }
+  .video-frame.tall { width: min(100%, calc(62vh * var(--ar, 1.7778))); }
   .transport { flex-wrap: nowrap; }
   .transport button { flex: 1 1 0; min-width: 0; padding: 7px 4px; }
   .extras { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; }

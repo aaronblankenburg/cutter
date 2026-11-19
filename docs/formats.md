@@ -42,6 +42,8 @@ otio_namespace = "cutter"       # key of cutter's metadata in OTIO items
 music_dirs = ["music"]          # where music files are found by title (relative to the project, or absolute)
 external_clips = {}             # clips outside the footage: { E1 = { file = "intro.mp4" } }
 track_names = {}                # e.g. { V1 = "V1 Picture", A2 = "A2 Music" }
+frame = "16:9"                  # picture format of the cuts (see Frames); edit.json "frame" sets it per cut
+reframe = true                  # footage cut off by the frame keeps its subject in the picture (see Frames)
 
 [audio]
 under_music_db = -10.0          # camera audio of picture shots under music
@@ -308,6 +310,7 @@ margin of the best one.
 | `out_limits` | `[min, max]` for the out point when retiming |
 | `fade_in_s`, `stabilize` | fade-in at the start; stabilise in FilmCraft (`true`) |
 | `color` | `false`: no colour correction for this shot; `{"exposure", "temperature", "tint", "blacks"}`: these values instead of the suggestion (see Colour) |
+| `focus` | where the picture is cut when its shape differs from the frame: `[x, y]` (shares of width and height that come to the middle), `x` alone, or `"centre"`; also on a cutaway. Default: found by reframe (see Frames) |
 
 **Music cue:** `cue` (M1, M2 …), `title`, `artist`, `license`, `file` (relative to the project, or found by
 `title`/`search` in `timeline.music_dirs`), `from` and `to` (anchors), `source_start` (seconds into the track at
@@ -316,7 +319,8 @@ margin of the best one.
 
 **Markers:** `name`, an anchor (`section`/`edge`, or `time`), optional `duration` and `color`.
 
-**Other top-level keys:** `external_clips` (`{"E1": {"file", "duration"}}`), `credits_music_lines` (lines for
+**Other top-level keys:** `frame` (the cut's picture format: `"16:9"`, `"9:16"`, `"4:5"`, `"3:4"`, `"1:1"`,
+`"2:3"`, `"4:3"`, `"21:9"` or `"WIDTHxHEIGHT"`; default `[timeline] frame`), `external_clips` (`{"E1": {"file", "duration"}}`), `credits_music_lines` (lines for
 `{music_lines}` in the credits), `intro` (map intro: `map`, `route`, `overview` images, `map_start`, `map_duration`,
 `map_zoom` with `start_scale`, `start_center`, `target_center`, `route_center`, `zoom_from`, `zoom_to`, `labels` …),
 `end_text` (text cards over the ending: `source`, `style`, `cards: [{"from", "to", "text"}]`, `music_dip_db`),
@@ -394,8 +398,45 @@ subtitle). Each change carries a comment naming the person, the comment number a
 `cutter timeline <cut>` writes `cuts/<cut>/<cut>.otio` (OpenTimelineIO), `<cut>.fcp7.xml` (FCP 7 XML) and
 `<cut>.srt`. Tracks: V1 picture, V2 map, V3 route, V4 cutaways, V5 overview, A1 dialogue, A2 music. Every item
 carries metadata under the key `timeline.otio_namespace` (default `cutter`): `nr`, `section`, `kind`, `note`, `tag`,
-`source_resolution`, `scale_percent`, `audio`, `cutaway_of`. Clips smaller than the sequence (1920×1080) are scaled
-to fill it. Media references are `file://` URLs built from the footage roots.
+`source_resolution`, `scale_percent`, `offset`, `audio`, `cutaway_of`. The sequence has the cut's frame (see Frames;
+1920×1080 by default); clips are scaled to fill it. Media references are `file://` URLs built from the footage roots.
+
+## Frames
+
+The picture format of a cut (module `frame`): `edit.json` `"frame"`, else `[timeline] frame`, else 16:9.
+
+| Frame | Size | For |
+|---|---|---|
+| `16:9` | 1920×1080 | landscape: YouTube, TV, presentations |
+| `9:16` | 1080×1920 | vertical full screen: Instagram Reels and Stories, TikTok, YouTube Shorts |
+| `4:5` | 1080×1350 | portrait feed post: Instagram, Facebook |
+| `3:4` | 1080×1440 | portrait: Instagram profile grid, phone photos |
+| `1:1` | 1080×1080 | square feed post |
+| `2:3` | 1080×1620 | tall pin: Pinterest |
+| `4:3` | 1440×1080 | classic TV, old footage |
+| `21:9` | 2560×1080 | cinema widescreen |
+| `WxH` | e.g. `3840x2160` | any other size (even numbers, 128–8192) |
+
+- **Footage** fills the frame and is cut off where its shape differs (a landscape clip in 9:16 keeps about a third of
+  its width). **Reframing** (module `reframe`) decides which part stays: faces first, then people, then animals,
+  found once a second on the analysed file (stand-ins are enough; needs the face/object models of `cutter analyze`)
+  and stored in `analysis/reframe.json` (`{"version": 1, "clips": {"C005": {"size", "mtime", "frames": [[t, [[label,
+  cx, cy, w, h, score], …]], …]}}}`). Per shot (and cutaway) the window is placed where it holds the most subject
+  weight between `in` and `out`; it does not move within the shot. A shot's `focus` in edit.json wins; without
+  subjects the middle stays. `[timeline] reframe = false` turns the search off (`focus` still counts). The plan is
+  kept in `cuts/<cut>/work/reframe_plan.json`: `{"frame", "on", "shots": {"<nr>": {"focus", "offset", "why",
+  "shown", "cutaways": [… | null]}}}`, `offset` in frame pixels from the middle.
+- **FilmCraft** gets a sequence in the frame's size and the offset as each clip's position; the **review render**
+  crops at the same place. The exchange formats (FCP 7 XML, FCPXML, OTIO) get the sequence size and keep the footage
+  centred, with a cyan marker "Reframe shot 12" saying where the subject is.
+- **Titles, credits, end-text cards** stay laid out for 1920×1080 in filmcraft.json and edit.json and are moved into
+  the frame: positions keep their share of width and height, sizes follow the shorter side, a text that would not fit
+  the width gets smaller (the credits as one block). In 9:16 nothing is placed in the top 14 % and the bottom 22 %,
+  where the apps put their buttons and captions; subtitles keep that bottom margin too.
+- **Map intro**: `cutter map overview` with `"frame": "9:16"` in its config frames the country for that format.
+- **Review**: `review.mp4` is 720 lines on the shorter side (720×1280 for 9:16), thumbnails 108 lines;
+  `timeline.json` has `"frame": {"name", "width", "height"}` when it is not 16:9, and the player takes that shape.
+  `[filmcraft] export_height` counts the shorter side too (360 gives 360×640).
 
 ### Packages for other editors (`cutter export`)
 
@@ -454,7 +495,9 @@ Optional; named by `[filmcraft] config` in cutter.toml. All keys are optional an
  "source": {"edit", "otio", "video", "video_kind", "decisions", "alternatives"}, "created": "…"}
 ```
 
-Next to it: `review.mp4` (at most 720p; an export of 720 lines or fewer keeps its size; shot numbers are burned into rough renders), `thumbs_NN.jpg` with `thumbs.vtt`, and
+`"frame": {"name", "width", "height"}` is there for cuts that are not 16:9 (see Frames).
+
+Next to it: `review.mp4` (at most 720 lines on the shorter side; an export of 720 lines or fewer keeps its size; shot numbers are burned into rough renders), `thumbs_NN.jpg` with `thumbs.vtt`, and
 `poster.jpg`, the before/after stills of the colour suggestion (`color-<nr>.jpg`), and the previews of the alternatives (`alt-<id>-<n>.mp4`/`.jpg`; `file`/`poster` are null when the clip
 was not found). In `alternatives`, `t`/`t_to` are the place in this cut, `current` is what the cut uses there.
 `data/project.json` holds the title, reviewers, the agent's name and the UI language; an app that embeds the review

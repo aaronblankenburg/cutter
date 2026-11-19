@@ -13,6 +13,9 @@ answer a question, so never ask one and never wait for an answer.
   audience, target length, style, music wishes, no-gos and people who must not appear, plus the files the user gave
   (storyboard, images, music with their licences). It is written in the user's language; write your decisions and
   replies in that language.
+- **The format** (16:9 film, 9:16 reel, 4:5, 1:1 …) is in briefing.md and `[timeline] frame` of cutter.toml; set
+  `"frame"` in edit.json only when the briefing asks for another format for this cut. For reels follow "Formats" in
+  first-cut.md.
 - **The user's selection** (`selects.json`, also summarised in briefing.md): favourites to use where they fit,
   rejects to leave out (first-cut.md, “The story”).
 - **Decide missing points yourself** and record every assumption in the cut's `decisions.json` as an entry with

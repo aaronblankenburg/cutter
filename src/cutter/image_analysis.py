@@ -148,12 +148,13 @@ class Detector:
 
     def detect(self, bgr, full=None):
         """{"faces": [height share …], "objects": [(label, height share) …], "found": [{"v", "size", "score",
-        "crop"}]} for a BGR frame; found: the faces large enough to tell people apart, cut from the frame `full`
-        in its original size."""
+        "crop"}], "boxes": [(label, cx, cy, w, h, score) …]} for a BGR frame; found: the faces large enough to tell
+        people apart, cut from the frame `full` in its original size; boxes: faces ("face") and objects with their
+        centre and size as shares of the frame (reframe.py)."""
         import numpy as np
         cv2 = self.cv2
         h, w = bgr.shape[:2]
-        out = {"faces": [], "objects": [], "found": []}
+        out = {"faces": [], "objects": [], "found": [], "boxes": []}
         if self.faces:
             if self.size != (w, h):
                 self.faces.setInputSize((w, h))
@@ -161,6 +162,8 @@ class Detector:
             found = self.faces.detect(bgr)[1]
             found = found if found is not None else []
             out["faces"] = sorted((round(float(f[3]) / h, 3) for f in found), reverse=True)
+            out["boxes"] += [("face", float(f[0] + f[2] / 2) / w, float(f[1] + f[3] / 2) / h, float(f[2]) / w,
+                              float(f[3]) / h, float(f[14])) for f in found]
             if self.recognition and full is not None:
                 up = full.shape[0] / h
                 for f in found:
@@ -197,6 +200,9 @@ class Detector:
                 idx = np.where(cls == c)[0]
                 for k in np.array(cv2.dnn.NMSBoxes(boxes[idx].tolist(), conf[idx].tolist(), 0.45, 0.45)).reshape(-1):
                     out["objects"].append((COCO[c], round(min(1.0, float(boxes[idx][k][3]) / h), 3)))
+                    bx, by, bw, bh = (float(v) for v in boxes[idx][k])
+                    out["boxes"].append((COCO[c], (bx + bw / 2) / w, (by + bh / 2) / h, bw / w, bh / h,
+                                         float(conf[idx][k])))
         return out
 
 

@@ -6,7 +6,8 @@ From a folder of footage to `cut1`, ready for review. Formats: [docs/formats.md]
 
 Ask only what the request does not answer already, in one message:
 
-1. **Purpose and audience** – a keepsake for friends and family, a festival entry, a social media clip?
+1. **Purpose, audience and format** – a keepsake for friends and family, a festival entry, a social media clip?
+   Landscape 16:9, or vertical 9:16 for Reels, Shorts and TikTok, 4:5 or 1:1 for a feed post (see "Formats" below)?
 2. **Target length** – a number of minutes.
 3. **Style** – calm or upbeat, chronological or by theme, with text cards or a narrator?
 4. **Music** – any preferences? Which licenses are fine? (Default: CC0 and CC BY only; non-commercial licenses
@@ -57,6 +58,28 @@ Then look for yourself:
   [docs/formats.md](../../../docs/formats.md#selectsjson)), the user viewed the footage and marked favourites and
   rejects (whole clips or ranges, maybe with a note). Use the favourites where they fit the story; leave the rejects
   out. Where you do not follow the selection, say why in decisions.json.
+
+## Formats: Reels, Shorts, feed posts
+
+The picture format is `"frame"` in edit.json (or `[timeline] frame` in cutter.toml for every cut): `16:9`, `9:16`,
+`4:5`, `3:4`, `1:1`, `2:3`, `4:3`, `21:9` ([docs/formats.md](../../../docs/formats.md#frames)). Everything follows it:
+the timeline, FilmCraft, the exports, the titles (laid out for 1920×1080 in filmcraft.json, moved into the frame)
+and the review. Footage of another shape is cut off; cutter keeps the faces, people or animals in the picture
+(`cuts/<cut>/work/reframe_plan.json` after `cutter timeline`, `"why"` says what it found). Look at the review render
+and set a shot's `"focus"` where the subject is lost (`0.3` keeps the part 30 % from the left in the middle).
+
+For a vertical reel (9:16):
+- **Hook in the first two seconds**: start on the strongest moment, a face or movement, not on an establishing shot.
+- **Short**: 15–60 s for most reels, 90 s at most; one idea per reel. Many films give several reels.
+- **Portrait footage first**, then landscape shots with one clear subject; wide landscapes lose most of their width.
+  Close-ups work better than wide shots.
+- **Fast**: shots of 1–3 s, cuts on the beat; dialogue in short sentences.
+- **Subtitles for every spoken word** (most people watch without sound), short lines (at most about 30 characters),
+  burned in by the export; text stays out of the top 14 % and bottom 22 % (cutter does that for titles and cards).
+- **No long credits**: a short end card at most; music credits go into the caption of the post (say so in
+  decisions.json).
+
+Square and 4:5 posts are cut like reels, a little calmer; 21:9 like a film.
 
 ## 4. Music: license first, then beats
 

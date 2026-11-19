@@ -27,6 +27,7 @@ import struct
 import subprocess
 import time
 
+from . import frame as frame_mod, titles
 from .legacy import edit_from_legacy
 from .util import CutterError, MISSING, dump_json, read_json
 
@@ -418,10 +419,15 @@ def music_keyframes(a, b, lufs, dialogue, low, mu, fade=None, dip=None):
 
 
 def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music_analysis=None, retime_cues=None,
-           execute=True, color_plan=None):
+           execute=True, color_plan=None, frame=None, reframe=None):
     """Bring a version in and finish it. Returns log lines and counts.
-    color_plan: color.plan() of the cut; its values go into a Color Grading effect per shot and cutaway."""
+    color_plan: color.plan() of the cut; its values go into a Color Grading effect per shot and cutaway.
+    frame: the cut's frame (frame.py; the sequence has it from the XML), titles and cards are moved into it;
+    reframe: reframe.plan() of the cut, its offsets become the clips' positions."""
     edit = edit_from_legacy(edit)[0]
+    fr = frame_mod.of(edit, frame)
+    fc, edit = titles.for_frame(fc, edit, fr)
+    CX, CY = fr.centre()
     log = []
     shots = {s["nr"]: s for sec in edit["sections"] for s in sec["shots"]}
     batch = []
@@ -515,7 +521,7 @@ def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music
             KM = (wh[0] / 2, wh[1] / 2) if wh[0] % 2 or wh[1] % 2 else (wh[0] // 2, wh[1] // 2)
 
         def center(s): return [ZP[i] - (ZP[i] - C0[i]) * s0 / s for i in (0, 1)]
-        def pos(m, s, C): return [round(960 + (m[0] - C[0]) * s, 2), round(540 + (m[1] - C[1]) * s, 2)]
+        def pos(m, s, C): return [round(CX + (m[0] - C[0]) * s, 2), round(CY + (m[1] - C[1]) * s, 2)]
         ease = lambda u: 4 * u ** 3 if u < 0.5 else 1 - (-2 * u + 2) ** 3 / 2
         t_a, t_b = kz["zoom_from"], kz["zoom_to"]
 
@@ -635,16 +641,17 @@ def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music
             if lines > 2:
                 raise CutterError(f"End-text card with {lines} lines (at most two): {card['text'][:40]}…")
             height = style["band"]["height"][str(lines)]
-            r = ex("graphics.newRectangle", {"position": [960, style["center_y"]], "size": [1920, height], "seconds": round(b_ - a_, 3),
+            r = ex("graphics.newRectangle", {"position": [CX, style["center_y"]], "size": [fr.w, height], "seconds": round(b_ - a_, 3),
                                              "track": gtrack, "time": tk(a_)})
             band_clip, band_layer = r["clip"], r["layer"]
             base_y = style["center_y"] - 18 if lines == 2 else style["center_y"] + 20
-            rt_ = ex("graphics.newText", {"text": card["text"], "position": [960, base_y], "size": style["size"], "font": style["font"],
+            size = card.get("size", style["size"])
+            rt_ = ex("graphics.newText", {"text": card["text"], "position": [CX, base_y], "size": size, "font": style["font"],
                                           "fontStyle": style["fontStyle"], "clip": band_clip})
             add("graphics.set", {"clip": band_clip, "layer": band_layer,
                                  "props": {"fill_color": style["band"]["color"], "opacity": style["band"]["opacity"], "stroke": False}})
             add("graphics.set", {"clip": band_clip, "layer": rt_["layer"],
-                                 "props": {"align": "center", "size": style["size"], "fill_color": style["fill_color"], "position": [960, base_y],
+                                 "props": {"align": "center", "size": size, "fill_color": style["fill_color"], "position": [CX, base_y],
                                            **ec.get("shadow", {})}})
             for t, v in ((a_, 0), (a_ + ramp, 100), (b_ - ramp, 100), (b_ - 0.04, 0)):
                 add("effects.setParam", {"clip": band_clip, "effect": "opacity", "param": "opacity", "value": v, "time": tk(t), "keyframe": True})
@@ -708,6 +715,20 @@ def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music
     if color_plan is not None:
         log.append(f"Colour: {n_color} clips corrected" + ("" if color_plan.get("on") else " (switched off)"))
 
+    # reframing: the part of the picture with the subject (reframe.py) instead of the middle
+    n_placed = 0
+    for nr, rp in sorted(((reframe or {}).get("shots") or {}).items()):
+        nr = int(nr)
+        items = ([(v1[nr], rp)] if nr in v1 else []) + list(zip(v4.get(nr, []), rp.get("cutaways") or []))
+        for c, item in items:
+            off = (item or {}).get("offset")
+            if off and off != [0.0, 0.0]:
+                add("effects.setParam", {"clip": c["clip"], "effect": "motion", "param": "position",
+                                         "value": [round(CX + off[0], 2), round(CY + off[1], 2)]})
+                n_placed += 1
+    if reframe is not None and not fr.designed or n_placed:
+        log.append(f"Frame {fr.name} ({fr.size_text}): {n_placed} clips placed on their subject")
+
     n_stab = 0
     for nr in sorted(nr for nr, s in shots.items() if s.get("stabilize")):
         for c in ([v1[nr]] if nr in v1 else []) + v4.get(nr, []):
@@ -734,6 +755,7 @@ def finish(client, fc, edit, xml, srt, batch_path, base=None, backup=None, music
     batch_path.parent.mkdir(parents=True, exist_ok=True)
     batch_path.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in batch) + "\n", encoding="utf-8")
     result = {"batch": str(batch_path), "commands": len(batch), "dialogue": n_dialogue, "stabilised": n_stab, "colour": n_color,
+              "frame": fr.name, "reframed": n_placed,
               "sequence": new_seq, "duration": round(total, 3)}
     if execute:
         out, err, code = client.run(batch_path, keep_going=True)

@@ -15,6 +15,7 @@ import json
 import math
 import pathlib
 
+from . import frame as frame_mod
 from .util import CutterError, MISSING, dump_json, read_json
 
 FONT_DIR = "/usr/share/fonts/truetype/liberation"
@@ -138,9 +139,10 @@ def overview(cfg, base=pathlib.Path(".")):
     pts = [map_px(lon, lat, P) for poly in countries[country] for lon, lat in poly[0]]
     xs, ys = [p[0] for p in pts], [p[1] for p in pts]
     bx0, bx1, by0, by1 = min(xs), max(xs), min(ys), max(ys)
-    s0 = min(1920 * 0.9 / (bx1 - bx0), 1080 * 0.9 / (by1 - by0))
+    fr = frame_mod.get(cfg.get("frame"))                     # the cut's frame: the start view fills it
+    s0 = min(fr.w * 0.9 / (bx1 - bx0), fr.h * 0.9 / (by1 - by0))
     C0 = ((bx0 + bx1) / 2, (by0 + by1) / 2 - 0.015 * (by1 - by0))
-    RX, RY = 960 / s0 * 1.04, 540 / s0 * 1.04
+    RX, RY = fr.w / 2 / s0 * 1.04, fr.h / 2 / s0 * 1.04
     X0, Y0, X1, Y1 = C0[0] - RX, C0[1] - RY, C0[0] + RX, C0[1] + RY
     W, H = int(math.ceil((X1 - X0) / factor)), int(math.ceil((Y1 - Y0) / factor))
     OX, OY = X0, Y0

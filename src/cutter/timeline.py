@@ -3,8 +3,9 @@
 build():     edit.json + clips.json -> <out>.otio, <out>.fcp7.xml, <out>.srt
   Tracks: V1 picture, V2 map, V3 route (a map over the first shot after the intro, from edit.intro), V4 cutaways
   (picture over running dialogue), V5 overview (optional), A1 dialogue, A2 music, plus markers.
-  Sequence 1920x1080. Clips with a smaller resolution are scaled to fill the frame through "Basic Motion"
-  (e.g. 150 %); maps stay at 100 %. Music is taken from "file" (relative to the project) or looked up by title
+  Sequence in the cut's frame (frame.py: edit.json "frame", else [timeline] frame, else 1920x1080). Clips are
+  scaled to fill the frame through "Basic Motion" (e.g. 150 %), cut off where their shape differs; reframe.py says
+  which part stays (OTIO metadata "offset"); maps stay at 100 %. Music is taken from "file" (relative to the project) or looked up by title
   ("search") in the music folders (cutter.toml → timeline.music_dirs). "source_start" moves the entry point into the track, e.g. so that a
   downbeat falls on a cut.
 assemble():  build the timeline from the beat-aligned edit list, set the camera audio of picture shots (lowered
@@ -23,6 +24,7 @@ import xml.etree.ElementTree as ET
 from urllib.parse import unquote
 from xml.dom import minidom
 
+from . import frame as frame_mod
 from .legacy import EXTERNAL_KEYS, edit_from_legacy, otio_meta_in, otio_meta_out
 from .util import CutterError, MISSING, dump_json, lufs, read_json
 
@@ -68,11 +70,12 @@ def probe_duration(path):
         return None
 
 
-def fill_scale(w, h, rotation=0):
-    """Scale in percent so that the picture fills the 1920x1080 frame."""
+def fill_scale(w, h, rotation=0, fr=None):
+    """Scale in percent so that the picture fills the frame (default 1920x1080)."""
+    fw, fh = (fr.w, fr.h) if fr else (FRAME_W, FRAME_H)
     if rotation in (90, 270, -90):
         w, h = h, w
-    return max(FRAME_W / w, FRAME_H / h) * 100
+    return max(fw / w, fh / h) * 100
 
 
 def fcp_file_meta(w, h):
@@ -183,22 +186,24 @@ def load_edit(path):
 
 def build(edit_path, clips_path, base, out, ns="cutter", music_dirs=("music",), config_external=None,
           track_names=None, texts=None, metadata_keys="auto", media_roots=None, xml_suffix=".fcp7.xml", project_dir=None,
-          proxies=None, originals=False, url_of=None):
+          proxies=None, originals=False, url_of=None, frame=None, reframe=None):
     """Build the timeline. Returns a report (dict); writes <out>.otio, <out>_fcp7.xml and, if needed, <out>.srt.
     proxies: {clip ID: {"path", "width", "height"}} (proxies.table) makes it a draft that plays the proxies."""
     t = make(edit_path, clips_path, base, ns=ns, music_dirs=music_dirs, config_external=config_external,
              track_names=track_names, texts=texts, metadata_keys=metadata_keys, media_roots=media_roots,
-             project_dir=project_dir, proxies=proxies, originals=originals, url_of=url_of)
+             project_dir=project_dir, proxies=proxies, originals=originals, url_of=url_of, frame=frame,
+             reframe=reframe)
     return write(t, out, xml_suffix)
 
 
 def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config_external=None, track_names=None,
          texts=None, metadata_keys="auto", media_roots=None, project_dir=None, proxies=None, originals=False,
-         url_of=None):
+         url_of=None, frame=None, reframe=None):
     """The timeline in memory: {"timeline": OTIO timeline, "clips", "edit", "subtitles", "music", …} (see build).
     originals: size and scale the shots for the original footage rather than the stand-ins the server has (export).
     url_of(path, clip): the media reference of a file (clip: its clips.json entry for footage, else None) when the
-    timeline is meant for another computer; default: the local file URL."""
+    timeline is meant for another computer; default: the local file URL.
+    frame: the project's default frame (edit.json "frame" wins); reframe: reframe.plan() of the cut."""
     try:
         import opentimelineio as otio
     except ImportError:
@@ -217,9 +222,13 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
     if proxies is not None:
         clips = use_proxies(clips, proxies)
     base, fps = pathlib.Path(base), float(edit.get("fps", 25))
+    fr = frame_mod.of(edit, frame)
+    FW, FH = fr.w, fr.h
+    placed = (reframe or {}).get("shots") or {}
+    placed = {int(k): v for k, v in placed.items()}
     folders = [base / o for o in music_dirs] or [base]      # absolute music_dirs stay absolute
     for cid, x in external_clips(edit, config_external).items():
-        wh = probe_size(base / x["file"]) or (FRAME_W, FRAME_H)
+        wh = probe_size(base / x["file"]) or (FW, FH)
         clips[cid] = {"path": str(base / x["file"]), "file": x["file"], "duration": x["duration"], "fps": x["fps"],
                       "fps_raw": f'{x["fps"]}/1', "width": wh[0], "height": wh[1], "rotation": 0}
 
@@ -240,7 +249,7 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
     # --- picture and dialogue
     tl = otio.schema.Timeline(name=edit["title"], global_start_time=RT(0, fps))
     tl.metadata["fcp_xml"] = {"media": {"video": {"format": {"samplecharacteristics": {
-        "rate": {"timebase": int(fps), "ntsc": "FALSE"}, "width": FRAME_W, "height": FRAME_H,
+        "rate": {"timebase": int(fps), "ntsc": "FALSE"}, "width": FW, "height": FH,
         "anamorphic": "FALSE", "pixelaspectratio": "square", "fielddominance": "none"}}}, "audio": {}}}
     scaled = []
     V1 = otio.schema.Track(name=tracks["V1"], kind=otio.schema.TrackKind.Video)
@@ -259,8 +268,9 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
             if s["out"] > c["duration"] + 0.05:
                 raise CutterError(f'Shot {s["nr"]}: out {s["out"]} is past the end of {s["clip"]} ({c["duration"]:.2f} s)')
             name = f'{s["nr"]:02d} {s["clip"]} {_file_name(c)}'
-            w, h = c.get("width") or FRAME_W, c.get("height") or FRAME_H
-            scale = fill_scale(w, h, c.get("rotation") or 0)
+            w, h = c.get("width") or FW, c.get("height") or FH
+            scale = fill_scale(w, h, c.get("rotation") or 0, fr)
+            off = (placed.get(s["nr"]) or {}).get("offset")
             for tr in (V1, A1):
                 m = dict(base_meta)
                 extra = {}
@@ -268,6 +278,8 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
                 ref.metadata["fcp_xml"] = fcp_file_meta(w, h)
                 if tr is V1:
                     m.update({"source_resolution": f"{w}x{h}", "scale_percent": round(scale, 4)})
+                    if off and off != [0.0, 0.0]:
+                        m["offset"] = off
                     extra["fcp_xml"] = fcp_motion(scale)
                 elif s.get("audio"):
                     # clip level for the dialogue; FCP 7 allows at most +12 dB, the full value is in the metadata
@@ -379,7 +391,7 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
             shot_rng[m["nr"]] = (r_.start_time.to_seconds(), r_.end_time_exclusive().to_seconds())
     for sec in edit["sections"]:
         for s in sec["shots"]:
-            for e in s.get("cutaways", []):
+            for k_cut, e in enumerate(s.get("cutaways", [])):
                 a0, a1 = shot_rng[s["nr"]]
                 c = clips[e["clip"]]
                 r = rate_of(c)
@@ -393,15 +405,18 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
                     raise CutterError(f'Cutaway in shot {s["nr"]} overlaps the previous cutaway')
                 if start > cur4:
                     V4.append(gap(start - cur4))
-                w, h = c.get("width") or FRAME_W, c.get("height") or FRAME_H
-                scale = fill_scale(w, h, c.get("rotation") or 0)
+                w, h = c.get("width") or FW, c.get("height") or FH
+                scale = fill_scale(w, h, c.get("rotation") or 0, fr)
                 ref = ext_ref(c["path"], c["duration"], r, clip=c)
                 ref.metadata["fcp_xml"] = fcp_file_meta(w, h)
+                cm = {"cutaway_of": s["nr"], "note": e.get("note", ""), "scale_percent": round(scale, 4)}
+                cuts_placed = (placed.get(s["nr"]) or {}).get("cutaways") or []
+                off = (cuts_placed[k_cut] or {}).get("offset") if k_cut < len(cuts_placed) and cuts_placed[k_cut] else None
+                if off and off != [0.0, 0.0]:
+                    cm["offset"] = off
                 cl = otio.schema.Clip(name=f'{s["nr"]:02d}e {e["clip"]} {_file_name(c)}', media_reference=ref,
                                       source_range=TR(rt(e["in"], r), rt(dur, r)),
-                                      metadata={ns: meta_out({"cutaway_of": s["nr"], "note": e.get("note", ""),
-                                                              "scale_percent": round(scale, 4)}),
-                                                "fcp_xml": fcp_motion(scale)})
+                                      metadata={ns: meta_out(cm), "fcp_xml": fcp_motion(scale)})
                 V4.append(cl)
                 cur4 = start + V4.range_of_child(cl).duration.to_seconds()
                 n_cut += 1
@@ -424,9 +439,11 @@ def make(edit_path, clips_path, base, ns="cutter", music_dirs=("music",), config
     used = sorted(cid for cid in played if cid in (proxies or {}))
     if proxies is not None:
         tl.metadata[ns] = {"media": "proxies"}             # a draft; review-data and filmcraft export say so
+    if not fr.designed:
+        tl.metadata.setdefault(ns, {})["frame"] = fr.to_json()
     return {"timeline": tl, "clips": clips, "edit": edit, "subtitles": subs, "music": music_report, "music_text": report,
             "scaled": scaled, "cutaways": n_cut, "total": total, "used_proxies": used, "proxies": proxies is not None,
-            "V1": V1, "ns": ns, "legacy": legacy, "fps": fps, "base": base}
+            "V1": V1, "ns": ns, "legacy": legacy, "fps": fps, "base": base, "frame": fr}
 
 
 def write(t, out, xml_suffix=".fcp7.xml"):
@@ -450,7 +467,7 @@ def write(t, out, xml_suffix=".fcp7.xml"):
         pathlib.Path(srt).write_text(srt_text, encoding="utf-8")
     n = sum(1 for _ in V1.find_clips())
     lines = [f"{out}.otio and {out}{xml_suffix} written: {int(total // 60)}:{total % 60:05.2f}, {n} clips",
-             f"Scaled to 1920x1080 ({len(scaled)}):", *("  " + x for x in scaled or ["none"])]
+             f"Scaled to {t['frame'].size_text} ({len(scaled)}):", *("  " + x for x in scaled or ["none"])]
     if n_cut:
         lines.append(f"Cutaways over dialogue on V4: {n_cut}")
     if subs:
@@ -467,7 +484,7 @@ def write(t, out, xml_suffix=".fcp7.xml"):
 
 def assemble(retimed_path, clips_path, base, out_intermediate, target_edit, ns="cutter", music_dirs=("music",),
              config_external=None, track_names=None, texts=None, audio=None, external_ids=("TXT",), media_roots=None,
-             project_dir=None):
+             project_dir=None, frame=None, reframe=None):
     """Build the timeline from the beat-aligned edit list, set camera audio levels and write the final edit list.
 
     Picture shots (picture/ambience) under music (overlap > overlap_s) get under_music_db, the others are brought
@@ -480,7 +497,7 @@ def assemble(retimed_path, clips_path, base, out_intermediate, target_edit, ns="
     E, _ = load_edit(retimed_path)
     C = resolve_clips({c["id"]: c for c in read_json(clips_path)}, media_roots)
     report = build(retimed_path, clips_path, base, out_intermediate, ns, music_dirs, config_external, track_names, texts,
-                   media_roots=media_roots, project_dir=project_dir)
+                   media_roots=media_roots, project_dir=project_dir, frame=frame, reframe=reframe)
     tl = otio.adapters.read_from_file(report["otio"])
     A2 = next(t for t in tl.tracks if t.name.startswith("A2"))
     V1 = next(t for t in tl.tracks if t.name.startswith("V1"))

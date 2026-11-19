@@ -33,6 +33,7 @@ DEFAULTS = {
     "paths": {
         "clips": "analysis/clips.json",
         "color": "analysis/color.json",
+        "reframe": "analysis/reframe.json",
         "transcripts": "analysis/transcripts",
         "image_analysis": "analysis/image",
         "proxies": "analysis/proxies",
@@ -58,6 +59,8 @@ DEFAULTS = {
         "external_clips": {},
         "track_names": {},
         "texts": {},
+        "frame": "16:9",        # the picture format of the cuts (frame.py); edit.json "frame" sets it per cut
+        "reframe": True,        # footage cut off by the frame keeps its subject in the picture (reframe.py)
     },
     "retime": {
         "fps": 25,

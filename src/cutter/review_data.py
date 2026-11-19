@@ -30,6 +30,7 @@ import subprocess
 import tempfile
 import urllib.parse
 
+from . import frame as frame_mod
 from .legacy import decisions_from_legacy, edit_from_legacy, otio_meta_in
 from .util import CutterError, MISSING, log, read_json
 
@@ -151,7 +152,7 @@ def build_timeline(version, edit, otio, transcripts, ns="cutter", external=("TXT
              "nr_previous": es.get("nr_previous"), "tag": es.get("tag") or md.get("tag"),
              "audio_db": audio.get("gain_db"), "music_lower": bool(audio.get("music_lower")),
              "cutaways": [], "subtitles": [], "sentences": [], "text": "",
-             "_path": media_path(it) if is_clip else None}
+             "_path": media_path(it) if is_clip else None, "_offset": md.get("offset")}
         if is_clip and clip not in external:
             s["sentences"] = transcripts.sentences(clip, q_in, q_in + (b - a), start)
             s["text"] = " ".join(x["text"] for x in s["sentences"])
@@ -172,7 +173,8 @@ def build_timeline(version, edit, otio, transcripts, ns="cutter", external=("TXT
             by_nr[md["cutaway_of"]]["cutaways"].append({
                 "start": round(q(a), 3), "end": round(q(b), 3), "clip": name[1] if len(name) > 1 else "?",
                 "file": os.path.basename(media_path(it)), "source_in": round(q_in, 3),
-                "source_out": round(q_in + (b - a), 3), "note": md.get("note", ""), "_path": media_path(it)})
+                "source_out": round(q_in + (b - a), 3), "note": md.get("note", ""), "_path": media_path(it),
+                "_offset": md.get("offset")})
 
     # edit points: shot changes and the start/end of cutaways
     edits = [{"t": shots[i]["start"], "before": shots[i - 1]["nr"], "after": shots[i]["nr"], "kind": "shot"}
@@ -209,9 +211,28 @@ def build_timeline(version, edit, otio, transcripts, ns="cutter", external=("TXT
                for mk in otio["tracks"].get("markers", [])]
     subtitles = sorted((u for s in shots for u in s["subtitles"]), key=lambda u: u["start"])
 
-    return {"format": 2, "version": version, "title": edit.get("title") or otio.get("name"), "fps": FPS,
-            "duration": shots[-1]["end"] if shots else 0.0, "sections": sections, "shots": shots,
-            "edit_points": edits, "music": music, "subtitles": subtitles, "markers": markers}
+    out = {"format": 2, "version": version, "title": edit.get("title") or otio.get("name"), "fps": FPS,
+           "duration": shots[-1]["end"] if shots else 0.0, "sections": sections, "shots": shots,
+           "edit_points": edits, "music": music, "subtitles": subtitles, "markers": markers}
+    fr = otio_frame(otio, ns)
+    if not fr.designed:
+        out["frame"] = fr.to_json()
+    out["_frame"] = fr
+    return out
+
+
+def otio_frame(otio, ns="cutter"):
+    """The frame of a timeline (frame.py) from its OTIO file: the sequence size."""
+    meta = otio.get("metadata") or {}
+    own = (meta.get(ns) or {}).get("frame")
+    if own:
+        return frame_mod.get(own)
+    sc = (((((meta.get("fcp_xml") or {}).get("media") or {}).get("video") or {}).get("format") or {})
+          .get("samplecharacteristics") or {})
+    try:
+        return frame_mod.get([int(sc["width"]), int(sc["height"])])
+    except (KeyError, TypeError, ValueError, CutterError):
+        return frame_mod.get(None)
 
 
 def decisions(path, tl):
@@ -389,58 +410,70 @@ def drawtext(text, large=False, k=1.0):
             f"box=1:boxcolor=black@0.5:boxborderw={z(6)}")
 
 
-def frame_size(height=None):
-    """Width and height of a 16:9 review render: 1280x720, or smaller (even numbers) for height < 720."""
-    if not height or height >= H:
-        return W, H
-    h = max(2, int(height) // 2 * 2)
-    return (h * 16 // 9 + 1) // 2 * 2, h
+def frame_size(height=None, fr=None):
+    """Width and height of a review render in the frame `fr` (default 16:9): the shorter side 720 lines, or fewer
+    (even numbers) for height < 720, e.g. 1280x720, 720x1280, 640x360."""
+    fr = frame_mod.get(fr)
+    short = H if not height or height >= H else max(2, int(height) // 2 * 2)
+    return fr.review_size(short)
 
 
 def rough_video(tl, tmp, numbers, jobs, size=(W, H)):
-    """Picture track without sound: every shot (and every cutaway) as its own piece, then concatenated."""
+    """Picture track without sound: every shot (and every cutaway) as its own piece, then concatenated; footage the
+    frame cuts off is cropped where reframe.py placed it."""
     w, h = size
+    fr = tl.get("_frame")
     pieces = []        # (frame_from, frame_to, path|None, source_time_at_frame_from, label, hint)
     for s in tl["shots"]:
         f0, f1 = round(s["start"] * FPS), round(s["end"] * FPS)
         if f1 <= f0:
             continue
         if s["_path"]:
-            parts = [(f0, f1, s["_path"], s["source_in"] + (f0 / FPS - s["start"]), str(s["nr"]), None)]
+            parts = [(f0, f1, s["_path"], s["source_in"] + (f0 / FPS - s["start"]), str(s["nr"]), None,
+                      s.get("_offset"))]
         else:
             hint = "Black" if s["kind"] == "black" else "Title missing in the rough render"
-            parts = [(f0, f1, None, 0.0, str(s["nr"]), hint)]
+            parts = [(f0, f1, None, 0.0, str(s["nr"]), hint, None)]
         for e in s["cutaways"]:
             e0, e1 = round(e["start"] * FPS), round(e["end"] * FPS)
             new = []
-            for p0, p1, path, qz, lab, hw in parts:
+            for p0, p1, path, qz, lab, hw, off in parts:
                 if e1 <= p0 or e0 >= p1:
-                    new.append((p0, p1, path, qz, lab, hw))
+                    new.append((p0, p1, path, qz, lab, hw, off))
                     continue
                 if e0 > p0:
-                    new.append((p0, e0, path, qz, lab, hw))
+                    new.append((p0, e0, path, qz, lab, hw, off))
                 a0 = max(p0, e0)
-                new.append((a0, min(p1, e1), e["_path"], e["source_in"] + (a0 / FPS - e["start"]), f"{s['nr']}e", None))
+                new.append((a0, min(p1, e1), e["_path"], e["source_in"] + (a0 / FPS - e["start"]), f"{s['nr']}e", None,
+                            e.get("_offset")))
                 if e1 < p1:
-                    new.append((e1, p1, path, qz + (e1 - p0) / FPS, lab, hw))
+                    new.append((e1, p1, path, qz + (e1 - p0) / FPS, lab, hw, off))
             parts = new
         pieces.extend(parts)
+    k = min(w, h) / H
+    per_px = w / (fr.w if fr else W)          # frame pixels (reframe offsets) -> render pixels
 
     def command(i, st):
-        p0, p1, path, qz, lab, hw = st
+        p0, p1, path, qz, lab, hw, off = st
         out = tmp / f"piece_{i:04d}.mp4"
         vf = []
         if path:
             inp = ["-ss", f"{max(0.0, qz):.3f}", "-i", path]
-            vf += [f"scale={w}:{h}:force_original_aspect_ratio=increase", f"crop={w}:{h}", f"fps={FPS}", "setsar=1",
+            if off:
+                dx, dy = round(off[0] * per_px, 1), round(off[1] * per_px, 1)
+                crop = (f"crop={w}:{h}:'min(max((iw-ow)/2-({dx}),0),iw-ow)':"
+                        f"'min(max((ih-oh)/2-({dy}),0),ih-oh)'")
+            else:
+                crop = f"crop={w}:{h}"
+            vf += [f"scale={w}:{h}:force_original_aspect_ratio=increase", crop, f"fps={FPS}", "setsar=1",
                    "tpad=stop_mode=clone:stop_duration=2"]
         else:
             inp = ["-f", "lavfi", "-i", f"color=c=black:s={w}x{h}:r={FPS}"]
             if hw:
-                vf.append(drawtext(hw, large=True, k=h / H))
+                vf.append(drawtext(hw, large=True, k=k))
         vf.append("format=yuv420p")
         if numbers:
-            vf.append(drawtext(lab, k=h / H))
+            vf.append(drawtext(lab, k=k))
         return out, ["ffmpeg", "-nostdin", "-v", "error", "-y", *inp, "-frames:v", p1 - p0, "-vf", ",".join(vf), "-an",
                      "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-maxrate", "2500k", "-bufsize", "5000k",
                      "-g", 2 * FPS, "-r", FPS, "-video_track_timescale", 12800, "-threads", 2, out]
@@ -572,13 +605,14 @@ def export_video(source, tl, target, tmp, numbers):
     p = probe(source)
     if abs(p["duration"] - tl["duration"]) > 0.5:
         log(f"  Warning: video {p['duration']:.2f} s, timeline {tl['duration']:.2f} s – does the export match the version?")
-    if not numbers and p["codec"] == "h264" and (p["height"] or 0) <= 720 and abs(p["fps"] - FPS) < 0.01 and p["audio"]:
+    short = min(p["width"] or 0, p["height"] or 0) or (p["height"] or 0)
+    if not numbers and p["codec"] == "h264" and short <= 720 and abs(p["fps"] - FPS) < 0.01 and p["audio"]:
         log(f"  Export is already {p['height']}p25 H.264 – only remuxing (faststart)")
         run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", source, "-map", "0:v:0", "-map", "0:a:0", "-c", "copy",
              "-movflags", "+faststart", target])
         return
-    w, h = (W, H)
-    if p["width"] and p["height"] and p["height"] < H and p["width"] <= W:
+    w, h = frame_size(None, tl.get("_frame"))
+    if p["width"] and p["height"] and p["height"] < h and p["width"] <= w:
         w, h = p["width"] // 2 * 2, p["height"] // 2 * 2
     vf = [f"scale={w}:{h}:force_original_aspect_ratio=decrease:flags=lanczos", f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2",
           f"fps={FPS}", "setsar=1", "format=yuv420p"]
@@ -592,7 +626,8 @@ def export_video(source, tl, target, tmp, numbers):
          "-c:a", "aac", "-b:a", "160k", "-ac", 2, "-movflags", "+faststart", target])
 
 
-def thumbnails(video, folder, duration):
+def thumbnails(video, folder, duration, size=(THUMB_W, THUMB_H)):
+    THUMB_W, THUMB_H = size
     for old in folder.glob("thumbs_*.jpg"):
         old.unlink()
     per_sheet = THUMB_COLS * THUMB_ROWS
@@ -742,19 +777,20 @@ def create(version, edit_path, otio_path, target, transcripts, video=None, decis
                 export_video(pathlib.Path(video), tl, new, tmp, numbers)
             else:
                 log("Rough review render from the timeline (no titles or transitions, with music):")
-                rough_render(tl, new, tmp, numbers, jobs, external, levels, frame_size(height))
+                rough_render(tl, new, tmp, numbers, jobs, external, levels, frame_size(height, tl["_frame"]))
             between = folder / "review.mp4.new"           # copy next to it first, then replace atomically
             shutil.copyfile(new, between)
             os.replace(between, video_target)
         p = probe(video_target)
         if abs(p["duration"] - tl["duration"]) > 0.5:
             log(f"Warning: review.mp4 is {p['duration']:.2f} s long, the timeline {tl['duration']:.2f} s")
-        n = thumbnails(video_target, folder, p["duration"])
+        thumb = tl["_frame"].review_size(THUMB_H)
+        n = thumbnails(video_target, folder, p["duration"], thumb)
         run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-ss", f"{min(35.0, p['duration'] / 2):.2f}", "-i", video_target,
              "-frames:v", 1, "-q:v", 3, folder / "poster.jpg"])
         tl["video"] = {"file": "review.mp4", "width": p["width"], "height": p["height"], "fps": round(p["fps"], 3),
                        "duration": round(p["duration"], 3), "numbers_burned_in": numbers}
-        tl["thumbnails"] = {"vtt": "thumbs.vtt", "interval": THUMB_STEP, "width": THUMB_W, "height": THUMB_H, "count": n}
+        tl["thumbnails"] = {"vtt": "thumbs.vtt", "interval": THUMB_STEP, "width": thumb[0], "height": thumb[1], "count": n}
         tl["poster"] = "poster.jpg"
     tmp_tl = folder / "timeline.json.new"
     tmp_tl.write_text(json.dumps(without_internal(tl), ensure_ascii=False, indent=1), encoding="utf-8")
