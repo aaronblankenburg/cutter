@@ -43,8 +43,38 @@
     LANG = (window.REVIEW_STRINGS || {})[want] ? want : 'en';
     document.documentElement.lang = LANG;
   }
+  // Icons: inline SVG on a 24 px grid for a 2 px line in currentColor, the size of the text next to them and centred on
+  // it (style.css .ico) – not text glyphs, whose size and baseline depend on whichever font has them.
+  const ICONS = {
+    play: '<path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/>',
+    pause: '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor" stroke="none"/>',
+    'skip-back': '<path d="M18.5 5v14L8 12z" fill="currentColor"/><path d="M5.5 5v14"/>',
+    'skip-forward': '<path d="M5.5 5v14L16 12z" fill="currentColor"/><path d="M18.5 5v14"/>',
+    'chevron-left': '<path d="M14.5 6l-6 6 6 6"/>',
+    'chevron-right': '<path d="M9.5 6l6 6-6 6"/>',
+    repeat: '<path d="M4.5 11.5V10a3.5 3.5 0 0 1 3.5-3.5h11.5M16.5 3.5l3 3-3 3M19.5 12.5V14a3.5 3.5 0 0 1-3.5 3.5H4.5M7.5 20.5l-3-3 3-3"/>',
+    maximize: '<path d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    check: '<path d="M4.5 12.5l5 5L19.5 7"/>',
+  };
+  function icon(name) {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('class', 'ico'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = ICONS[name] || '';                       // fixed strings above only
+    return s;
+  }
+  // the text of a control, with its icon (data-icon before, data-icon-end after) kept
+  function label(e, text) {
+    const parts = [];
+    if (e.dataset.icon) parts.push(icon(e.dataset.icon));
+    if (text) parts.push(el('span', null, text));
+    if (e.dataset.iconEnd) parts.push(icon(e.dataset.iconEnd));
+    e.replaceChildren(...parts);
+  }
+  function withIcon(e, name) { e.prepend(icon(name)); return e; }
   function translatePage() {
-    for (const e of document.querySelectorAll('[data-i18n]')) e.textContent = t(e.dataset.i18n);
+    for (const e of document.querySelectorAll('[data-i18n]')) label(e, t(e.dataset.i18n));
+    for (const e of document.querySelectorAll('[data-icon]:not([data-i18n]), [data-icon-end]:not([data-i18n])')) label(e, e.textContent.trim());
     for (const e of document.querySelectorAll('[data-i18n-html]')) e.innerHTML = t(e.dataset.i18nHtml);   // static strings only
     for (const e of document.querySelectorAll('[data-i18n-title]')) e.title = t(e.dataset.i18nTitle);
     for (const e of document.querySelectorAll('[data-i18n-aria]')) e.setAttribute('aria-label', t(e.dataset.i18nAria));
@@ -709,7 +739,7 @@
     if (e.t_to != null) when.append(el('small', null, t('until', { t: short(e.t_to) })));
     const content = el('div', 'content');
     const who = el('div', 'who', e.person);
-    if (e.status !== 'open') who.append(el('span', `status ${e.status}`, e.status === 'done' ? t('status_done_mark') : statusText(e.status)));
+    if (e.status !== 'open') who.append(e.status === 'done' ? withIcon(el('span', 'status done', t('status_done_mark')), 'check') : el('span', `status ${e.status}`, statusText(e.status)));
     content.append(who);
     const line = el('div', 'text-line');
     if (e.action) line.append(el('span', 'action', actionText(e.action)));
@@ -738,7 +768,8 @@
     const head = el('div', 'note-head');
     head.append(el('span', 'agent-label', d.t == null ? t('agent_general', { agent: AGENT }) : t('change_by', { agent: AGENT })));
     if (d.t != null) {
-      const z = button(`▶ ${short(d.t)}${d.t_to != null ? '–' + short(d.t_to) : ''}`, t('jump_to', { t: short(d.t) }), () => selectNote(d));
+      const z = button(`${short(d.t)}${d.t_to != null ? '–' + short(d.t_to) : ''}`, t('jump_to', { t: short(d.t) }), () => selectNote(d));
+      label(z, z.textContent); withIcon(z, 'play');
       z.className = 'note-time';
       head.append(z);
     }
@@ -889,7 +920,8 @@
   }
   function playButton() {
     const b = $('#play-button');
-    b.textContent = video.paused ? '▶' : '❚❚';
+    const want = video.paused ? 'play' : 'pause';
+    if (b.dataset.icon !== want) { b.dataset.icon = want; label(b, ''); }
     b.setAttribute('aria-label', video.paused ? t('play') : t('pause'));
   }
 
@@ -1177,12 +1209,14 @@
       const b = button(chosen === String(o.n) ? t('alt_chosen') : t('alt_take'), t('alt_take_title', { n: o.n, clip: o.clip }),
         () => choose(p, o));
       b.className = chosen === String(o.n) ? 'save' : '';
+      if (chosen === String(o.n)) withIcon(b, 'check');
       li.append(b);
       ol.append(li);
     }
     place.append(ol);
     const keep = button(chosen === 'keep' ? t('alt_kept') : t('alt_keep'), t('alt_keep_title'), () => choose(p, null));
     keep.className = 'alt-keep' + (chosen === 'keep' ? ' save' : '');
+    if (chosen === 'keep') withIcon(keep, 'check');
     place.append(keep);
     return place;
   }

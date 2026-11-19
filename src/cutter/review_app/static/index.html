@@ -34,21 +34,21 @@
 
     <div class="controls" role="toolbar" data-i18n-aria="playback" aria-label="Playback">
       <div class="row transport">
-        <button type="button" data-cmd="prevShot" data-i18n-title="prev_shot" data-i18n-aria="prev_shot" title="Previous shot (Shift+←)" aria-label="Previous shot">⏮</button>
+        <button type="button" data-cmd="prevShot" data-i18n-title="prev_shot" data-i18n-aria="prev_shot" title="Previous shot (Shift+←)" aria-label="Previous shot" data-icon="skip-back"></button>
         <button type="button" data-cmd="back2" data-i18n-title="back2" title="2 s back (←)">−2 s</button>
-        <button type="button" data-cmd="frameBack" data-i18n-title="frame_back" data-i18n-aria="frame_back" data-i18n="frame_back_label" title="1 frame back (,)" aria-label="1 frame back">‹ 1 f</button>
-        <button type="button" data-cmd="play" class="main" id="play-button" data-i18n-title="play_title" data-i18n-aria="play" title="Play/pause (Space, K)" aria-label="Play">▶</button>
-        <button type="button" data-cmd="frameFwd" data-i18n-title="frame_fwd" data-i18n-aria="frame_fwd" data-i18n="frame_fwd_label" title="1 frame forward (.)" aria-label="1 frame forward">1 f ›</button>
+        <button type="button" data-cmd="frameBack" data-i18n-title="frame_back" data-i18n-aria="frame_back" data-i18n="frame_back_label" data-icon="chevron-left" title="1 frame back (,)" aria-label="1 frame back">1 f</button>
+        <button type="button" data-cmd="play" class="main" id="play-button" data-i18n-title="play_title" data-i18n-aria="play" title="Play/pause (Space, K)" aria-label="Play" data-icon="play"></button>
+        <button type="button" data-cmd="frameFwd" data-i18n-title="frame_fwd" data-i18n-aria="frame_fwd" data-i18n="frame_fwd_label" data-icon-end="chevron-right" title="1 frame forward (.)" aria-label="1 frame forward">1 f</button>
         <button type="button" data-cmd="fwd2" data-i18n-title="fwd2" title="2 s forward (→)">+2 s</button>
-        <button type="button" data-cmd="nextShot" data-i18n-title="next_shot" data-i18n-aria="next_shot" title="Next shot (Shift+→)" aria-label="Next shot">⏭</button>
+        <button type="button" data-cmd="nextShot" data-i18n-title="next_shot" data-i18n-aria="next_shot" title="Next shot (Shift+→)" aria-label="Next shot" data-icon="skip-forward"></button>
       </div>
       <div class="row extras">
         <div class="speed" role="group" data-i18n-aria="speed" aria-label="Speed">
           <button type="button" data-rate="0.5">0.5×</button><button type="button" data-rate="1" class="on">1×</button><button type="button" data-rate="1.5">1.5×</button><button type="button" data-rate="2">2×</button>
         </div>
-        <button type="button" data-cmd="editLoop" id="loop-button" data-i18n="loop_label" data-i18n-title="loop_title" title="Edit preview: loop from 2 s before to 2 s after the nearest edit (S)">⟲ Edit</button>
+        <button type="button" data-cmd="editLoop" id="loop-button" data-i18n="loop_label" data-icon="repeat" data-i18n-title="loop_title" title="Edit preview: loop from 2 s before to 2 s after the nearest edit (S)">Edit</button>
         <button type="button" data-cmd="zoom" id="zoom-button" data-i18n="zoom_label" data-i18n-title="zoom_title" title="Zoom the timeline: ±20 s around the current position (Z)">Zoom</button>
-        <button type="button" data-cmd="fullscreen" data-i18n-title="fullscreen" data-i18n-aria="fullscreen" title="Full screen" aria-label="Full screen">⛶</button>
+        <button type="button" data-cmd="fullscreen" data-i18n-title="fullscreen" data-i18n-aria="fullscreen" title="Full screen" aria-label="Full screen" data-icon="maximize"></button>
         <span class="time" id="time">00:00:00 / 00:00:00</span>
       </div>
     </div>
@@ -70,7 +70,7 @@
         <span class="io">
           <button type="button" data-cmd="setIn" data-i18n="set_in" data-i18n-title="set_in_title" title="Range: start (I)">I start</button>
           <button type="button" data-cmd="setOut" data-i18n="set_out" data-i18n-title="set_out_title" title="Range: end (O)">O end</button>
-          <button type="button" data-cmd="clearRange" id="range-clear" data-i18n-title="clear_range" title="Clear range (Esc)" hidden>×</button>
+          <button type="button" data-cmd="clearRange" id="range-clear" data-i18n-title="clear_range" title="Clear range (Esc)" aria-label="Clear range" data-icon="x" hidden></button>
         </span>
       </div>
       <div class="quick" id="quick"></div>

@@ -416,3 +416,10 @@ body.embedded .layout { max-width: none; }
 @media (pointer: coarse) {
   select, input[type="text"], textarea, .cut-choice select, .filter select { font-size: 16px; }
 }
+
+/* icons (app.js ICONS): the size of the text next to them, centred on it by flex */
+.ico { width: 1.15em; height: 1.15em; flex: none; display: inline-block; vertical-align: -0.2em; overflow: visible;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+button:has(> .ico), .status.done:has(> .ico) { display: inline-flex; align-items: center; justify-content: center; gap: .35em; }
+.transport button > .ico:only-child { width: 20px; height: 20px; }
+.transport .main > .ico { width: 22px; height: 22px; }
